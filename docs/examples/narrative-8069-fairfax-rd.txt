@@ -1,0 +1,22 @@
+Summary
+Based on 5 recorded sales near 8069 FAIRFAX RD, the estimated value as of 2026-11-16 is $1,408,932, with an indicated range of $1,204,838 to $1,508,933. The estimate applies the average price per assessor above-grade square foot of the comparable sales to the subject's 3,165 sq ft.
+
+Comparable sales
+- 8032 WASHINGTON RD sold 2026-04-13 for $1,455,000 (0.07 mi away). Strong match on Distance: 0.07 mi away; Above-grade living area: 3,056 vs 3,165 sf (-3%). Main difference: Sale recency: sold 7.1 months before the valuation date. [PARID 1022 03  0092A · Deed Book 28664 Page 0342]
+- 8028 WELLINGTON RD sold 2026-03-20 for $1,439,000 (0.11 mi away). Strong match on Distance: 0.11 mi away; Above-grade living area: 3,424 vs 3,165 sf (+8%). Main difference: Sale recency: sold 7.9 months before the valuation date. [PARID 1022 03  0130A · Deed Book 28643 Page 0860]
+- 8006 FORT HUNT RD sold 2026-10-01 for $1,375,000 (0.19 mi away). Strong match on Distance: 0.19 mi away; Sale recency: sold 1.5 months before the valuation date. Main difference: Above-grade living area: 3,612 vs 3,165 sf (+14%). [PARID 1022 03  0036A · Deed Book 28811 Page 1251]
+- 8112 WINGFIELD PL sold 2026-05-22 for $1,457,500 (0.29 mi away). Strong match on Above-grade living area: 3,088 vs 3,165 sf (-2%); Bathrooms: same (4/1 full/half). Main difference: Sale recency: sold 5.8 months before the valuation date. [PARID 1022 02100011 · Deed Book 28702 Page 1019]
+- 8113 WELLINGTON RD sold 2026-02-24 for $1,405,000 (0.23 mi away). Strong match on Above-grade living area: 2,947 vs 3,165 sf (-7%); Distance: 0.23 mi away. Main difference: Sale recency: sold 8.7 months before the valuation date. [PARID 1022 12  0182 · Deed Book 28619 Page 1403]
+
+Method
+5 comps: price ÷ above-grade sq ft = $476.11, $420.27, $380.68, $471.99, $476.76
+Average $445.16/sf · median $471.99/sf · high $476.76/sf · low $380.68/sf
+3,165 sf × $445.16/sf (average) = $1,408,932.13
+Estimate = $1,408,932.13
+Range (low–high comp $/sf, same adjustments) = $1,204,838 – $1,508,933
+Estimated change since the last sale (2021-06-16, $1,150,000): $258,932 (+22.5%).
+
+Condition and limitations
+County records show: Assessor condition rating: Average (a mass-appraisal rating, not an inspection); Assessor construction grade: Good 10.
+County records do not show repair needs. Year built by itself does not establish that any repair is necessary. To confirm: Interior condition and finishes (kitchen, baths, flooring) — walkthrough or listing photos; Age and condition of roof, HVAC, water heater and windows — seller disclosure or inspection; Basement finish quality and any water intrusion — inspection; Detached garage, ADU or other outbuildings — not in county dwelling data; confirm on site.
+Sale prices and dates are from recorded deeds in Fairfax County public records. Property characteristics reflect the county's current record and may differ from each home's condition at the time it sold. This CMA is not an appraisal.

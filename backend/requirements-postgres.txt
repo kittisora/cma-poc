@@ -1,0 +1,2 @@
+# Add for PostgreSQL / PostGIS deployments (DATABASE_URL=postgresql+psycopg://...)
+psycopg[binary]==3.3.9

@@ -1,0 +1,15 @@
+# Runtime dependencies (Python 3.12+)
+fastapi==0.163.1
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.9
+alembic==1.20.1
+pydantic==2.14.3
+pydantic-settings==2.16.3
+httpx==0.28.1
+reportlab==5.1.0
+python-docx==1.2.0
+pillow==13.0.0
+openai==3.45.0
+anthropic==2.9.0
+python-multipart==0.0.34
+tzdata==2026.6

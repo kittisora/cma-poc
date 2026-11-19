@@ -1,0 +1,39 @@
+# Production-style stack: PostgreSQL/PostGIS + the app.
+#   docker compose up -d --build                         # migrations run on start
+#   docker compose --profile refresh run --rm refresh    # load / refresh county data
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: cma
+      POSTGRES_USER: cma
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cma -d cma"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://cma:${POSTGRES_PASSWORD:-change-me}@db:5432/cma
+    ports: ["8000:8000"]
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+  refresh:
+    build: .
+    profiles: ["refresh"]
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://cma:${POSTGRES_PASSWORD:-change-me}@db:5432/cma
+    command: ["python", "-m", "app.ingest.refresh"]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata:

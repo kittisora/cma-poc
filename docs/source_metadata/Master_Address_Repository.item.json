@@ -1,0 +1,73 @@
+{
+ "id": "dd047d0bc4944f638318a2eb0d23bb65",
+ "owner": "FairfaxCounty",
+ "ownerId": "b9173013540c15a75aec878ffd638370",
+ "orgId": "ioennV6PpG5Xodq0",
+ "created": 1685549210000,
+ "modified": 1794810787000,
+ "guid": null,
+ "name": "Master_Address_Repository",
+ "title": "Master Address Repository",
+ "type": "Feature Service",
+ "typeKeywords": [
+  "ArcGIS Server",
+  "Data",
+  "Feature Access",
+  "Feature Service",
+  "Metadata",
+  "Service",
+  "Singlelayer",
+  "Hosted Service"
+ ],
+ "description": "",
+ "tags": [
+  ""
+ ],
+ "snippet": "",
+ "thumbnail": "thumbnail/thumbnail.png",
+ "documentation": null,
+ "extent": [
+  [
+   -77.53710444098017,
+   38.626181758656884
+  ],
+  [
+   -77.03568344648326,
+   39.053432578577606
+  ]
+ ],
+ "categories": [
+  "/Categories/Property and Planning/Land Description/Address Info"
+ ],
+ "spatialReference": "102746",
+ "accessInformation": "",
+ "classification": null,
+ "licenseInfo": "<div style='text-align:Left;'><div><div><p><span>Please review the </span><a href='https://www.fairfaxcounty.gov/maps/disclaimer' style='text-decoration:underline;' rel='nofollow ugc'><span style='font-size:10pt'>Fairfax County GIS Division disclaimer</span></a><span>.</span></p><p><span /></p><p><span /></p></div></div></div>",
+ "culture": "en-us",
+ "properties": {
+  "indexJobId": ""
+ },
+ "advancedSettings": null,
+ "url": "https://services1.arcgis.com/ioennV6PpG5Xodq0/arcgis/rest/services/Master_Address_Repository/FeatureServer",
+ "proxyFilter": null,
+ "access": "public",
+ "size": 279740416,
+ "subInfo": 0,
+ "appCategories": [],
+ "industries": [],
+ "languages": [],
+ "largeThumbnail": null,
+ "banner": null,
+ "screenshots": [],
+ "listed": false,
+ "commentsEnabled": false,
+ "numComments": 0,
+ "numRatings": 0,
+ "avgRating": 0,
+ "numViews": 0,
+ "scoreCompleteness": 50,
+ "groupDesignations": null,
+ "apiToken1ExpirationDate": -1,
+ "apiToken2ExpirationDate": -1,
+ "lastViewed": -1
+}

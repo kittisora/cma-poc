@@ -1,0 +1,13 @@
+.env
+.git
+backend/.venv
+backend/data
+backend/.pytest_tmp
+frontend/node_modules
+frontend/out
+frontend/.next
+react-pro-components-main
+_archive
+e2e_output
+docs/screenshots
+*.xlsx

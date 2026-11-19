@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest==9.2.0
+openpyxl==3.1.5       # reads the client workbook in tests/test_workbook.py
+playwright==1.65.2    # scripts/e2e_ui.py (uses an installed Edge/Chrome)
