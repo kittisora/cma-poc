@@ -14,9 +14,9 @@ from dataclasses import replace
 
 import pytest
 
-# Tests never call a real AI provider: blank the keys even when .env holds real ones
+# Tests never call a real AI provider (and never need the server login): blank them even when .env sets them
 # (environment variables take precedence over the .env file).
-for _key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+for _key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "APP_PASSWORD"):
     os.environ[_key] = ""
 os.environ["AI_PROVIDER"] = "auto"
 

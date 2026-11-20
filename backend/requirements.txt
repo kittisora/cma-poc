@@ -13,3 +13,4 @@ openai==3.45.0
 anthropic==2.9.0
 python-multipart==0.0.34
 tzdata==2026.6
+XlsxWriter==3.2.9

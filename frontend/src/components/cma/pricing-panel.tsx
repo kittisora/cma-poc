@@ -104,7 +104,7 @@ export function PricingPanel(p: Props) {
                     <p className="text-sm text-tertiary">None. Add one for features the comps do not share, such as a detached garage or ADU.</p>
                 )}
                 {p.adjustments.map((a, i) => (
-                    <div key={i} className="grid grid-cols-[1fr_8rem_auto] items-end gap-2 sm:grid-cols-[1fr_9rem_1fr_auto]" data-testid="adjustment-row">
+                    <div key={i} className="grid grid-cols-[1fr_8rem_auto] items-end gap-2 sm:grid-cols-[1fr_9rem_6rem_1fr_auto]" data-testid="adjustment-row">
                         <Input label={i === 0 ? "Label" : undefined} aria-label="Adjustment label" size="sm" value={a.label} onChange={(x) => updateAdj(i, { label: x })} />
                         <InputNumber
                             label={i === 0 ? "Amount" : undefined}
@@ -114,6 +114,16 @@ export function PricingPanel(p: Props) {
                             value={a.amount}
                             formatOptions={{ style: "currency", currency: "USD", maximumFractionDigits: 0 }}
                             onChange={(n) => updateAdj(i, { amount: Number.isNaN(n) ? 0 : n })}
+                        />
+                        <InputNumber
+                            label={i === 0 ? "Sq ft" : undefined}
+                            aria-label="Adjustment area in square feet"
+                            size="sm"
+                            className="max-sm:row-start-2"
+                            minValue={0}
+                            value={a.sf ?? Number.NaN}
+                            formatOptions={{ maximumFractionDigits: 0 }}
+                            onChange={(n) => updateAdj(i, { sf: Number.isNaN(n) ? null : n })}
                         />
                         <Input
                             label={i === 0 ? "Basis / note" : undefined}
@@ -140,6 +150,10 @@ export function PricingPanel(p: Props) {
                 </div>
             </Fieldset>
 
+            <Fieldset legend="Estimated prices">
+                <EstimatedPrices a={p.a} adjustments={p.adjustments} />
+            </Fieldset>
+
             <Fieldset legend="Calculation">
                 <BasisCard b={v.bases.above_grade} primary={v.primary_basis === "above_grade"} />
                 <BasisCard b={v.bases.total_finished} primary={v.primary_basis === "total_finished"} />
@@ -149,6 +163,75 @@ export function PricingPanel(p: Props) {
                     </Callout>
                 ))}
             </Fieldset>
+        </div>
+    );
+}
+
+/**
+ * The client workbook's "ESTIMATED PRICES" block (LOT, FIN SF, AVERAGE, MEDIAN, HIGH, LOW, MEAN VALUE,
+ * Appreciation, ADD For Garage/ADU, SF, TOTAL), turned on its side to fit the panel: one column per method.
+ */
+function EstimatedPrices({ a, adjustments }: { a: Analysis; adjustments: Adjustment[] }) {
+    const v = a.valuation;
+    const order = [v.primary_basis, ...(["total_finished", "above_grade"] as const).filter((b) => b !== v.primary_basis)];
+    const cols = order.map((k) => (k ? v.bases[k] : undefined)).filter((b): b is BasisResult => !!b?.available);
+    const addSf = adjustments.reduce((s, x) => s + (x.sf ?? 0), 0);
+    if (!cols.length) return <p className="text-sm text-tertiary">Not enough data for an estimate yet.</p>;
+    const rows: { label: string; value: (b: BasisResult) => string; strong?: boolean }[] = [
+        { label: "Lot", value: () => (a.subject.lot_sf ? `${a.subject.lot_sf.toLocaleString()} sf` : "—") },
+        { label: "Fin sf (subject)", value: (b) => `${b.subject_area?.toLocaleString() ?? "—"} sf` },
+        { label: "Average", value: (b) => money(b.indicated.mean) },
+        { label: "Median", value: (b) => money(b.indicated.median) },
+        { label: "High", value: (b) => money(b.indicated.high) },
+        { label: "Low", value: (b) => money(b.indicated.low) },
+        { label: v.point_statistic === "mean" ? "Mean value" : "Mean value (median $/sf)", value: (b) => money(b.base_value), strong: true },
+        { label: `Appreciation (${v.appreciation_pct}%)`, value: (b) => money(b.appreciation_amount) },
+        { label: "Add for garage/ADU", value: (b) => money(b.adjustments_total) },
+        { label: "SF", value: () => (addSf ? addSf.toLocaleString() : "—") },
+    ];
+    const short = (b: BasisResult) => (b.basis === "total_finished" ? "Total finished $/sf" : "Above-grade $/sf");
+    return (
+        <div className="overflow-hidden rounded-lg ring-1 ring-secondary">
+            <table className="w-full text-sm tabular-nums">
+                <caption className="sr-only">Estimated prices</caption>
+                <thead>
+                    <tr className="bg-warning-secondary text-primary">
+                        <th scope="col" className="px-3 py-2 text-left text-xs font-semibold">
+                            Estimated prices
+                        </th>
+                        {cols.map((b) => (
+                            <th key={b.basis} scope="col" className="px-3 py-2 text-right text-xs font-semibold">
+                                {short(b)}
+                                {b.basis === v.primary_basis && <span className="block font-normal text-tertiary">headline</span>}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-secondary bg-warning-primary">
+                    {rows.map((r) => (
+                        <tr key={r.label}>
+                            <th scope="row" className="px-3 py-1.5 text-left font-medium text-secondary">
+                                {r.label}
+                            </th>
+                            {cols.map((b) => (
+                                <td key={b.basis} className={cx("px-3 py-1.5 text-right", r.strong ? "font-medium text-primary" : "text-secondary")}>
+                                    {r.value(b)}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                    <tr className="bg-warning-secondary">
+                        <th scope="row" className="px-3 py-2 text-left font-semibold text-primary">
+                            Total
+                        </th>
+                        {cols.map((b) => (
+                            <td key={b.basis} className="px-3 py-2 text-right font-semibold text-primary">
+                                {money(b.estimate)}
+                            </td>
+                        ))}
+                    </tr>
+                </tbody>
+            </table>
         </div>
     );
 }

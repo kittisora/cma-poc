@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections import defaultdict
 from collections.abc import Iterable
 
@@ -61,6 +62,92 @@ def search_addresses(session: Session, query: str, zip_code: str | None = None, 
             "address_id": a.source_record_id,
         })
     return out
+
+
+# ------------------------------------------------- subdivision / block / street
+# The county legal description carries the block ("MT VERNON TERRACE LT 21 BLK A");
+# the Master Address Repository's own SUBDIVISION_BLOCK is almost never filled in.
+_BLOCK_RE = re.compile(r"\b(?:BLK|BLOCK)\s+([A-Z0-9]+(?:-[A-Z0-9]+)?)\b")
+_LOT_RE = re.compile(r"\b(?:LT|LOT)\s+([A-Z0-9]+(?:-[A-Z0-9]+)?)\b")
+_area_cache: dict = {"key": None, "rows": []}
+
+
+def parse_block(legal: str | None) -> str | None:
+    m = _BLOCK_RE.search((legal or "").upper())
+    return m.group(1) if m else None
+
+
+def parse_lot(legal: str | None) -> str | None:
+    m = _LOT_RE.search((legal or "").upper())
+    return m.group(1) if m else None
+
+
+def _natural_key(s: str) -> tuple:
+    return tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in re.findall(r"\d+|\D+", s))
+
+
+def _area_rows(session: Session) -> list[dict]:
+    """Every current address with its subdivision, block and street, cached until the next refresh."""
+    key = (id(session.get_bind()), session.scalar(select(func.max(RefreshRun.id))),
+           session.scalar(select(func.count()).select_from(Address)))
+    if _area_cache["key"] == key:
+        return _area_cache["rows"]
+    stmt = (select(Address.pin, Address.address_1, Address.street_num, Address.street_name, Address.unit,
+                   Address.city, Address.zip, Address.lat, Address.lon, Address.subdivision,
+                   Address.source_record_id, Parcel.legal_description, Parcel.property_type, Parcel.land_use)
+            .join(Parcel, Parcel.pin == Address.pin, isouter=True).where(Address.status == "Current"))
+    rows = []
+    for r in session.execute(stmt):
+        rows.append({
+            "pin": r.pin, "address": r.address_1, "street_num": r.street_num or "", "street": r.street_name,
+            "unit": r.unit or "", "city": r.city, "zip": r.zip, "lat": r.lat, "lon": r.lon,
+            "subdivision": (r.subdivision or "").strip() or None, "block": parse_block(r.legal_description),
+            "lot": parse_lot(r.legal_description), "legal_description": r.legal_description,
+            "property_type": r.property_type, "land_use": r.land_use, "address_id": r.source_record_id,
+        })
+    _area_cache.update(key=key, rows=rows)
+    return rows
+
+
+def _area_filter(rows: list[dict], subdivision: str | None, block: str | None, street: str | None,
+                 zip_code: str | None) -> list[dict]:
+    def norm(x: str | None) -> str | None:
+        return x.strip().upper() if x and x.strip() else None
+    sub, blk, st = norm(subdivision), norm(block), norm(street)
+    return [r for r in rows
+            if (not sub or (r["subdivision"] or "").upper() == sub)
+            and (not blk or (r["block"] or "") == blk)
+            and (not st or (r["street"] or "").upper() == st)
+            and (not zip_code or r["zip"] == zip_code)]
+
+
+def _counts(rows: list[dict], field: str) -> list[dict]:
+    counts: dict[str, int] = defaultdict(int)
+    for r in rows:
+        if r[field]:
+            counts[r[field]] += 1
+    return [{"name": k, "count": counts[k]} for k in sorted(counts, key=_natural_key)]
+
+
+def search_areas(session: Session, subdivision: str | None = None, block: str | None = None,
+                 zip_code: str | None = None) -> dict:
+    """Choices for the three search filters. Blocks narrow to the subdivision; streets to both."""
+    rows = _area_rows(session)
+    in_zip = _area_filter(rows, None, None, None, zip_code)
+    in_sub = _area_filter(in_zip, subdivision, None, None, None)
+    in_block = _area_filter(in_sub, None, block, None, None)
+    return {"subdivisions": _counts(in_zip, "subdivision"),
+            "blocks": _counts(in_sub, "block") if subdivision else [],
+            "streets": _counts(in_block, "street")}
+
+
+def search_by_area(session: Session, subdivision: str | None = None, block: str | None = None,
+                   street: str | None = None, zip_code: str | None = None, limit: int = 2000) -> dict:
+    found = _area_filter(_area_rows(session), subdivision, block, street, zip_code)
+    found.sort(key=lambda r: (r["street"] or "", _natural_key(r["street_num"]), _natural_key(r["unit"])))
+    keep = ("pin", "address", "city", "zip", "lat", "lon", "property_type", "land_use", "address_id",
+            "subdivision", "block", "lot", "street")
+    return {"total": len(found), "results": [{k: r[k] for k in keep} for r in found[:limit]]}
 
 
 # ---------------------------------------------------------------- property

@@ -1,4 +1,10 @@
-import type { Analysis, Branding, CMARequest, Meta, ReportModel, SearchResult } from "@/lib/types";
+import type { Analysis, AreaOption, Branding, CMARequest, Meta, ReportModel, SearchResult } from "@/lib/types";
+
+const qs = (params: Record<string, string | null | undefined>) =>
+  Object.entries(params)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`)
+    .join("&");
 
 export class ApiError extends Error {
   status: number;
@@ -33,6 +39,10 @@ export const api = {
       `/api/search?q=${encodeURIComponent(q)}${zip ? `&zip=${zip}` : ""}`,
       { signal },
     ),
+  areas: (f: { subdivision?: string | null; block?: string | null }, signal?: AbortSignal) =>
+    request<{ subdivisions: AreaOption[]; blocks: AreaOption[]; streets: AreaOption[] }>(`/api/search/areas?${qs(f)}`, { signal }),
+  properties: (f: { subdivision?: string | null; block?: string | null; street?: string | null }, signal?: AbortSignal) =>
+    request<{ results: SearchResult[]; total: number; timing_ms: number }>(`/api/search/properties?${qs(f)}`, { signal }),
   analyze: (req: CMARequest, signal?: AbortSignal) =>
     request<Analysis>("/api/cma/analyze", { method: "POST", body: JSON.stringify(req), signal }),
   setInput: (pin: string, field: string, value: number | string | null, note?: string) =>
@@ -62,8 +72,8 @@ export const api = {
   preview: (body: unknown) => request<ReportModel>("/api/reports/preview", { method: "POST", body: JSON.stringify(body) }),
 };
 
-/** POST the reviewed CMA and save the returned PDF/DOCX. */
-export async function downloadReport(format: "pdf" | "docx", body: unknown): Promise<string> {
+/** POST the reviewed CMA and save the returned PDF/XLSX. */
+export async function downloadReport(format: "pdf" | "xlsx", body: unknown): Promise<string> {
   const res = await fetch(`/api/reports/${format}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
