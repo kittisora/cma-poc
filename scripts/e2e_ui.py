@@ -142,7 +142,8 @@ def run(base: str, out: Path, channel: str, shots: Path | None, ask_ai: bool = F
 
         # other pages
         page.get_by_role("link", name="Workbook check").first.click()
-        expect(page.get_by_text("Regression passed")).to_be_visible(timeout=20_000)
+        # the saved subject is either a workbook example (regression badge) or a county property (facts strip)
+        expect(page.get_by_text("Regression passed").or_(page.get_by_test_id("workbook-subject-facts"))).to_be_visible(timeout=20_000)
         if shots:
             page.screenshot(path=str(shots / "workbook_check.png"))
         page.get_by_role("link", name="Data & sources").first.click()

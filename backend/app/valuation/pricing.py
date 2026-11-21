@@ -40,7 +40,6 @@ BASIS_LABELS = {
 class Adjustment(BaseModel):
     label: str
     amount: float
-    sf: float | None = None  # e.g. garage/ADU area (workbook column T); informational
     note: str | None = None
     source: str = "agent assumption"
 

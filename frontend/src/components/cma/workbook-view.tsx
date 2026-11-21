@@ -11,23 +11,38 @@ import { Select } from "@/components/base/select/select";
 import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
 import { api } from "@/lib/api";
 import { money } from "@/lib/format";
+import { useCma } from "@/providers/cma-provider";
+import { AddressSearch } from "./address-search";
 import { Callout } from "./callout";
+import { notify } from "./notify";
 import { PageHeader } from "./page-header";
 
 const SEVERITY_COLOR: Record<string, "error" | "warning" | "gray" | "brand"> = { high: "error", medium: "warning", low: "gray", info: "brand" };
 
+type Subject = { kind: "workbook" | "property"; key: string; label: string };
+
 export function WorkbookView() {
-    const [subject, setSubject] = useState("1009 New");
+    const { meta } = useCma();
+    const [subject, setSubject] = useState<Subject | null>(null);
+    // Only values the user typed are sent; otherwise the server uses its own defaults (and labels their source).
     const [finished, setFinished] = useState<number | null>(null);
     const [garage, setGarage] = useState<number | null>(null);
     const [apprec, setApprec] = useState(0);
     const [r, setR] = useState<Record<string, any> | null>(null);
     const [err, setErr] = useState("");
 
+    // The page's subject is saved for the whole team; load it first.
     useEffect(() => {
+        api.getWorkbookSubject()
+            .then((s) => setSubject({ kind: s.kind, key: s.key, label: s.label ?? s.key }))
+            .catch(() => setSubject({ kind: "workbook", key: "1009 New", label: "1009 New" }));
+    }, []);
+
+    useEffect(() => {
+        if (!subject) return;
         const t = setTimeout(() => {
             api.regression({
-                subject,
+                ...(subject.kind === "property" ? { subject_pin: subject.key } : { subject: subject.key }),
                 finished_sf: finished ?? undefined,
                 garage_adjustment: garage ?? undefined,
                 appreciation_pct: apprec || 0,
@@ -35,13 +50,24 @@ export function WorkbookView() {
                 .then((x) => {
                     setR(x);
                     setErr("");
-                    if (finished === null) setFinished(Number(x.inputs.finished_sf));
-                    if (garage === null) setGarage(Number(x.inputs.garage_adjustment));
                 })
                 .catch((e: Error) => setErr(e.message));
         }, 200);
         return () => clearTimeout(t);
     }, [subject, finished, garage, apprec]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const changeSubject = async (next: Subject) => {
+        setSubject(next);
+        setFinished(null);
+        setGarage(null);
+        setR(null);
+        try {
+            await api.putWorkbookSubject(next.kind, next.key);
+            notify("success", "Subject updated", `${next.label} is now the Workbook Check subject for the team.`);
+        } catch (e) {
+            notify("error", "Could not save the subject", (e as Error).message);
+        }
+    };
 
     const header = (
         <PageHeader
@@ -49,13 +75,13 @@ export function WorkbookView() {
             title="Workbook regression check"
             description={
                 r
-                    ? `Reproduces the client's “${r.workbook}” pricing method from its original inputs, then shows how the estimate changes under the app's own rules. Valuation date ${r.valuation_date}.`
+                    ? `Applies the client's “${r.workbook}” pricing method to the subject below and compares it with the app's own comp selection. Valuation date ${r.valuation_date}.`
                     : "Reproduces the client's workbook pricing method and compares it with the app's rules."
             }
         />
     );
 
-    if (!r) {
+    if (!r || !subject) {
         return (
             <>
                 {header}
@@ -64,42 +90,93 @@ export function WorkbookView() {
         );
     }
     const reg = r.regression;
+    const isProperty = r.subject_kind === "property";
+    const f = r.subject_facts;
+    const subjectItems = [
+        ...(subject.kind === "property" ? [{ id: `property|${subject.key}`, label: subject.label, supportingText: "Fairfax County record" }] : []),
+        ...Object.keys(r.subjects).map((s) => ({ id: `workbook|${s}`, label: s, supportingText: "workbook example (Oronoco St, 22314)" })),
+    ];
+    const facts: [string, string][] = f
+        ? [
+              ["Address", f.address],
+              ["PARID", f.pin],
+              ["Style / built", `${f.style ?? "—"} · ${f.year_built ?? "—"}`],
+              ["Beds / baths", `${f.beds ?? "—"} / ${f.baths ?? "—"}`],
+              ["Above-grade", f.above_grade_sf ? `${f.above_grade_sf.toLocaleString()} sf` : "not recorded"],
+              ["Total finished", f.total_finished_sf ? `${f.total_finished_sf.toLocaleString()} sf` : "not recorded"],
+              ["Assessed", money(f.assessed_total)],
+          ]
+        : [];
 
     return (
         <div className="flex flex-col gap-6">
             {header}
-            <Callout tone="info" title="Where the workbook's addresses are">
+            <Callout tone={isProperty ? "success" : "info"} title={isProperty ? "Subject is a Fairfax County property" : "Where the workbook's addresses are"}>
                 {r.address_verification.result}
             </Callout>
 
-            <section className="flex flex-col gap-4 rounded-xl bg-primary p-5 shadow-xs ring-1 ring-secondary" aria-labelledby="wb-inputs">
-                <h2 id="wb-inputs" className="text-sm font-semibold text-primary">
-                    Inputs (editable assumptions for this workbook example only)
+            <section className="flex flex-col gap-4 rounded-xl bg-primary p-5 shadow-xs ring-1 ring-secondary" aria-labelledby="wb-subject">
+                <h2 id="wb-subject" className="text-sm font-semibold text-primary">
+                    Subject property
                 </h2>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                     <Select
                         label="Subject"
-                        selectedKey={subject}
+                        hint="Saved for the whole team."
+                        selectedKey={`${subject.kind}|${subject.key}`}
                         onSelectionChange={(k) => {
-                            setSubject(String(k));
-                            setFinished(null);
-                            setGarage(null);
+                            const [kind, ...rest] = String(k).split("|");
+                            const key = rest.join("|");
+                            if (kind === subject.kind && key === subject.key) return;
+                            const item = subjectItems.find((i) => i.id === String(k));
+                            changeSubject({ kind: kind as Subject["kind"], key, label: item?.label ?? key });
                         }}
-                        items={Object.keys(r.subjects).map((s) => ({ id: s, label: s }))}
+                        items={subjectItems}
                     >
-                        {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+                        {(item) => (
+                            <Select.Item id={item.id} supportingText={item.supportingText}>
+                                {item.label}
+                            </Select.Item>
+                        )}
                     </Select>
+                    <div data-testid="workbook-subject-search">
+                        <AddressSearch
+                            zips={meta?.target_zips ?? ["22308", "22309"]}
+                            current={null}
+                            label="Change subject to an address"
+                            onSelect={(res) => changeSubject({ kind: "property", key: res.pin, label: `${res.address}, ${res.zip}` })}
+                        />
+                    </div>
+                </div>
+                {isProperty && (
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-2 border-t border-secondary pt-4 sm:grid-cols-4 lg:grid-cols-7" data-testid="workbook-subject-facts">
+                        {facts.map(([k, v]) => (
+                            <div key={k} className="flex min-w-0 flex-col gap-0.5">
+                                <dt className="text-xs font-medium text-quaternary">{k}</dt>
+                                <dd className="text-sm font-medium whitespace-pre-wrap text-primary">{v}</dd>
+                            </div>
+                        ))}
+                    </dl>
+                )}
+            </section>
+
+            <section className="flex flex-col gap-4 rounded-xl bg-primary p-5 shadow-xs ring-1 ring-secondary" aria-labelledby="wb-inputs">
+                <h2 id="wb-inputs" className="text-sm font-semibold text-primary">
+                    Inputs (editable assumptions for this check only)
+                </h2>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     <InputNumber
                         label="Finished sq ft"
+                        hint={isProperty ? `Default: ${r.inputs.finished_sf_source}` : undefined}
                         minValue={100}
-                        value={finished ?? NaN}
+                        value={finished ?? Number(r.inputs.finished_sf)}
                         formatOptions={{ maximumFractionDigits: 0 }}
                         onChange={(n) => !Number.isNaN(n) && setFinished(n)}
                     />
                     <InputNumber
                         label="Garage/ADU adjustment"
                         step={5000}
-                        value={garage ?? NaN}
+                        value={garage ?? Number(r.inputs.garage_adjustment)}
                         formatOptions={{ style: "currency", currency: "USD", maximumFractionDigits: 0 }}
                         onChange={(n) => !Number.isNaN(n) && setGarage(n)}
                     />
@@ -113,7 +190,11 @@ export function WorkbookView() {
                         </BadgeWithIcon>
                     </div>
                 ) : (
-                    <p className="text-xs text-tertiary">Inputs differ from the workbook&apos;s, so there is no workbook total to compare against.</p>
+                    <p className="text-xs text-tertiary">
+                        {isProperty
+                            ? "This subject is not in the workbook, so there is no workbook cell total to compare against. Variant C is a live CMA from county records."
+                            : "Inputs differ from the workbook's, so there is no workbook total to compare against."}
+                    </p>
                 )}
             </section>
 
@@ -121,7 +202,7 @@ export function WorkbookView() {
                 {r.variants.map((v: any) => (
                     <section key={v.variant} className="flex flex-col gap-3 rounded-xl bg-primary p-5 shadow-xs ring-1 ring-secondary">
                         <div className="flex items-start gap-3">
-                            <FeaturedIcon icon={FileCheck02} color={v.variant === "A" ? "brand" : "gray"} theme="light" size="md" />
+                            <FeaturedIcon icon={FileCheck02} color={(isProperty ? v.variant === "C" : v.variant === "A") ? "brand" : "gray"} theme="light" size="md" />
                             <h2 className="text-sm font-semibold text-primary">
                                 {v.variant}. {v.title}
                             </h2>

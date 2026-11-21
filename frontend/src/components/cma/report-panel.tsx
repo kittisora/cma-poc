@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download01, Edit05, Eye, Palette, Stars02, Table, Trash01 } from "@untitledui/icons";
+import { Download01, Edit05, Eye, File06, Palette, Stars02, Trash01 } from "@untitledui/icons";
 import { Heading as AriaHeading } from "react-aria-components";
 import { FileUpload } from "@/components/application/file-upload/file-upload-base";
 import { Dialog, Modal, ModalOverlay } from "@/components/application/modals/modal";
@@ -45,7 +45,7 @@ export function ReportPanel({ a, req, aiEnabled, narrative, narrativeSource, set
     const [preparedFor, setPreparedFor] = useState("");
     const [includeSources, setIncludeSources] = useState(true);
     const [preview, setPreview] = useState<ReportModel | null>(null);
-    const [busy, setBusy] = useState<"" | "draft" | "preview" | "pdf" | "xlsx">("");
+    const [busy, setBusy] = useState<"" | "draft" | "preview" | "pdf" | "docx">("");
     const [brandingOpen, setBrandingOpen] = useState(false);
 
     useEffect(() => {
@@ -89,13 +89,13 @@ export function ReportPanel({ a, req, aiEnabled, narrative, narrativeSource, set
         }
     };
 
-    const doExport = async (fmt: "pdf" | "xlsx") => {
+    const doExport = async (fmt: "pdf" | "docx") => {
         setBusy(fmt);
         try {
             const name = await downloadReport(fmt, body());
             notify("success", `Downloaded ${name}`, "The report uses exactly the figures and narrative shown here.");
         } catch (e) {
-            notify("error", `${fmt === "xlsx" ? "Excel" : "PDF"} export failed`, (e as Error).message);
+            notify("error", `${fmt.toUpperCase()} export failed`, (e as Error).message);
         } finally {
             setBusy("");
         }
@@ -147,8 +147,8 @@ export function ReportPanel({ a, req, aiEnabled, narrative, narrativeSource, set
                 <Button size="md" iconLeading={Download01} isDisabled={noEstimate || busy !== ""} isLoading={busy === "pdf"} showTextWhileLoading onClick={() => doExport("pdf")}>
                     Export PDF
                 </Button>
-                <Button size="md" iconLeading={Table} isDisabled={noEstimate || busy !== ""} isLoading={busy === "xlsx"} showTextWhileLoading onClick={() => doExport("xlsx")}>
-                    Export Excel
+                <Button size="md" iconLeading={File06} isDisabled={noEstimate || busy !== ""} isLoading={busy === "docx"} showTextWhileLoading onClick={() => doExport("docx")}>
+                    Export Word
                 </Button>
             </div>
 
@@ -204,7 +204,7 @@ function BrandingSlideout({
         <SlideoutMenu isOpen={open} onOpenChange={(o) => !o && onClose()} isDismissable className="max-w-lg">
             <SlideoutMenu.Header onClose={onClose}>
                 <h2 className="text-lg font-semibold text-primary">Report branding</h2>
-                <p className="text-sm text-tertiary">Shown on the PDF and Excel reports. Saved for the whole team.</p>
+                <p className="text-sm text-tertiary">Shown on the PDF and Word reports. Saved for the whole team.</p>
             </SlideoutMenu.Header>
             <SlideoutMenu.Content>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

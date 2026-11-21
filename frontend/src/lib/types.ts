@@ -80,15 +80,6 @@ export interface SearchResult {
   lon: number | null;
   property_type: string | null;
   land_use: string | null;
-  subdivision?: string | null;
-  block?: string | null;
-  lot?: string | null;
-  street?: string | null;
-}
-
-export interface AreaOption {
-  name: string;
-  count: number;
 }
 
 export interface Property {
@@ -183,8 +174,6 @@ export interface Comp {
 export interface Adjustment {
   label: string;
   amount: number;
-  /** Garage/ADU area, shown as "SF" next to the amount (workbook column T). */
-  sf?: number | null;
   note?: string | null;
   source?: string;
 }

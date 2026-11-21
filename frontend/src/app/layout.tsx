@@ -11,8 +11,8 @@ import { cx } from "@/utils/cx";
 const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 
 export const metadata: Metadata = {
-    title: { default: "CMA", template: "%s · CMA" },
-    description: "Comparative market analysis: comps, pricing and branded reports.",
+    title: { default: "CMA · Fairfax County 22308 / 22309", template: "%s · CMA" },
+    description: "Comparative market analysis from Fairfax County public records: comps, pricing and branded reports.",
     robots: { index: false, follow: false },
 };
 

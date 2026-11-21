@@ -125,6 +125,15 @@ def reproduce_workbook(subject: str = "1009 New", finished_sf: float | None = No
     s = SUBJECTS[subject]
     area = finished_sf if finished_sf is not None else s["finished_sf"]
     adj = garage_adjustment if garage_adjustment is not None else s["garage_adu"]
+    out = workbook_formula(area, adj, appreciation_pct)
+    # compare with the workbook whenever the inputs equal the workbook's own inputs
+    out["expected_workbook_total"] = (s["expected_total"] if (area == s["finished_sf"] and adj == s["garage_adu"]
+                                                              and not appreciation_pct) else None)
+    return out
+
+
+def workbook_formula(area: float, adj: float, appreciation_pct: float = 0.0) -> dict:
+    """The workbook's formula for any subject area: average typed $/sf (column V) × area + adjustment."""
     rows = sold_rows()
     rates = [r["V"] for r in rows]
     mean = statistics.fmean(rates)
@@ -141,9 +150,7 @@ def reproduce_workbook(subject: str = "1009 New", finished_sf: float | None = No
         "estimate": total,
         "range_low": area * min(rates) * (1 + appreciation_pct / 100) + adj,
         "range_high": area * max(rates) * (1 + appreciation_pct / 100) + adj,
-        # compare with the workbook whenever the inputs equal the workbook's own inputs
-        "expected_workbook_total": s["expected_total"] if (area == s["finished_sf"] and adj == s["garage_adu"]
-                                                           and not appreciation_pct) else None,
+        "expected_workbook_total": None,
         "lines": [f"Average of V for sold comps = ({' + '.join(f'{r}' for r in rates)}) ÷ {len(rates)} = ${mean:,.4f}/sf",
                   f"{area:,.0f} sf × ${mean:,.4f}/sf = ${base:,.2f}",
                   f"+ garage/ADU adjustment ${adj:,.0f}" + (f", appreciation {appreciation_pct:g}%" if appreciation_pct else ""),
@@ -170,6 +177,11 @@ def recompute_same_comps(subject: str = "1009 New", finished_sf: float | None = 
     s = SUBJECTS[subject]
     area = finished_sf if finished_sf is not None else s["finished_sf"]
     adj = garage_adjustment if garage_adjustment is not None else s["garage_adu"]
+    return recalculated_formula(area, adj, appreciation_pct)
+
+
+def recalculated_formula(area: float, adj: float, appreciation_pct: float = 0.0) -> dict:
+    """Variant B for any subject area: the workbook's sold comps with $/sf recalculated."""
     v = _valuation_from_rows(sold_rows(), area, adj, appreciation_pct)
     return {"variant": "B", "title": "Same comps, $/sf recalculated",
             "description": "The same 6 sold comps with $/sf recalculated by the app as sold price ÷ listing total "

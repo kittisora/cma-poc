@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 def create_app(run_migrations: bool = True) -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="CMA", version="1.0.0",
+    app = FastAPI(title="CMA — Fairfax County 22308/22309", version="1.0.0",
                   lifespan=lifespan if run_migrations else None)
     app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
                        allow_methods=["*"], allow_headers=["*"], expose_headers=["Content-Disposition", "X-CMA-Fingerprint"])

@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import type { Comp } from "@/lib/types";
 import { useCma } from "@/providers/cma-provider";
 import { cx } from "@/utils/cx";
+import { AddressSearch } from "./address-search";
 import { AssistantSlideout } from "./assistant-slideout";
 import { Callout } from "./callout";
 import { CompDetail } from "./comp-detail";
@@ -21,7 +22,6 @@ import { EstimateSummary } from "./estimate-summary";
 import { notify } from "./notify";
 import { PpsfChart } from "./ppsf-chart";
 import { PricingPanel } from "./pricing-panel";
-import { PropertyFinder } from "./property-finder";
 import { ReportPanel } from "./report-panel";
 import { SearchExplanation } from "./search-explanation";
 import { SubjectCard } from "./subject-card";
@@ -88,7 +88,7 @@ export function CmaDashboard() {
             <section aria-label="Subject and valuation date" className="flex flex-col gap-4 rounded-xl bg-primary p-4 shadow-xs ring-1 ring-secondary md:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
                     <div className="flex-1">
-                        <PropertyFinder current={cma.subject} onSelect={cma.chooseSubject} />
+                        <AddressSearch zips={meta.target_zips} current={cma.subject} onSelect={cma.chooseSubject} />
                     </div>
                     <ValuationDate value={cma.valuationDate} max={meta.today} onChange={cma.setValuationDate} />
                     <div className="flex h-10 min-w-44 items-center lg:justify-end" role="status" aria-live="polite">
@@ -129,9 +129,9 @@ export function CmaDashboard() {
                         <EmptyState.FeaturedIcon icon={SearchLg} color="brand" theme="light" />
                     </EmptyState.Header>
                     <EmptyState.Content>
-                        <EmptyState.Title>Find the subject property</EmptyState.Title>
+                        <EmptyState.Title>Find Comparable to Subjects Properties</EmptyState.Title>
                         <EmptyState.Description>
-                            Choose a subdivision, block or street, then pick the property. The app finds recorded sales on or before the valuation date, ranks them
+                            Search an address in ZIP {meta.target_zips.join(" or ")}. The app finds recorded sales on or before the valuation date, ranks them
                             by similarity (never by price), and prices the subject with the workbook&apos;s price-per-square-foot method.
                         </EmptyState.Description>
                     </EmptyState.Content>

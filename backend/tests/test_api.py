@@ -41,9 +41,6 @@ def test_normal_path_address_to_downloaded_reports(client):
     pdf = client.post("/api/reports/pdf", json=report)
     assert pdf.status_code == 200 and pdf.content[:5] == b"%PDF-"
     assert "attachment" in pdf.headers["content-disposition"]
-    xlsx = client.post("/api/reports/xlsx", json=report)
-    assert xlsx.status_code == 200 and xlsx.headers["content-disposition"].endswith('.xlsx"')
-    check_xlsx(xlsx.content, est2)
     docx = client.post("/api/reports/docx", json=report)
     assert docx.status_code == 200
     with zipfile.ZipFile(io.BytesIO(docx.content)) as z:
@@ -51,44 +48,6 @@ def test_normal_path_address_to_downloaded_reports(client):
     assert "Reviewed narrative." in xml and "Estimated change since the last sale" in xml
     assert f"{est2:,.0f}"[:5] in xml.replace("$", "")
     assert time.perf_counter() - t0 < 30
-
-
-def check_xlsx(content: bytes, estimate: float) -> None:
-    """The Excel report carries the workbook's ESTIMATED PRICES block with stored (cached) values."""
-    import pytest
-    openpyxl = pytest.importorskip("openpyxl")
-    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-    assert wb.sheetnames == ["CMA", "Subject", "Sources"]
-    ws = wb["CMA"]
-    cells = {c.value: c for row in ws.iter_rows() for c in row if isinstance(c.value, str)}
-    for h in ("ESTIMATED PRICES", "AVERAGE", "MEDIAN", "HIGH", "LOW", "Appreciation", "ADD For Garage/ADU", "SF",
-              "TOTAL", "MEAN", "MODE"):
-        assert h in cells, h
-    total = cells["TOTAL"]
-    headline = ws.cell(row=total.row + 1, column=total.column).value
-    assert abs(headline - estimate) < 0.01
-    formulas = openpyxl.load_workbook(io.BytesIO(content))["CMA"]
-    assert str(formulas.cell(row=total.row + 1, column=total.column).value).startswith("=")
-
-
-def test_search_by_subdivision_block_street(client):
-    areas = client.get("/api/search/areas").json()
-    assert {"name": "TEST", "count": areas["subdivisions"][0]["count"]} == areas["subdivisions"][0]
-    assert areas["blocks"] == []  # blocks are listed only within a subdivision
-    assert any(s["name"] == "MAIN ST" for s in areas["streets"])
-    found = client.get("/api/search/properties", params={"subdivision": "test", "street": "MAIN ST"}).json()
-    assert found["total"] >= 1 and found["results"][0]["pin"] == SUBJECT_PIN
-    assert found["results"][0]["subdivision"] == "TEST"
-    assert client.get("/api/search/properties").status_code == 422
-    assert client.get("/api/search/properties", params={"subdivision": "NOWHERE"}).json()["total"] == 0
-
-
-def test_block_and_lot_parsing():
-    from app.repository import parse_block, parse_lot
-    assert parse_block("MT VERNON TERRACE LT 21 BLK A") == "A"
-    assert parse_block("HOLLIN HALL VILLAGE LT 530 BLK 2 SEC 3") == "2"
-    assert parse_block("WOODLAWN MEWS LT 69") is None and parse_block(None) is None
-    assert parse_lot("ADDITION PLYMOUTH HAVEN LT 6B BLK 6 SEC 2") == "6B"
 
 
 def test_export_refuses_figures_that_changed(client):
@@ -293,3 +252,25 @@ def test_openai_no_credit_is_reported_plainly(loaded):
         run_agent(loaded, CMARequest(subject_pin=SUBJECT_PIN, valuation_date=VALUATION_DATE),
                   [{"role": "user", "content": "hi"}], client=SimpleNamespace(responses=_NoCredit()), provider="openai")
     assert str(err.value) == NO_CREDIT_MESSAGE
+
+
+def test_workbook_check_with_a_property_subject(client):
+    """The Workbook Check subject can be any property in the loaded data; the choice is saved for the team."""
+    assert client.get("/api/workbook/subject").json()["key"] == "1009 New"  # default
+
+    saved = client.put("/api/workbook/subject", json={"kind": "property", "key": SUBJECT_PIN}).json()
+    assert saved["kind"] == "property" and saved["label"].startswith("100 MAIN ST")
+    assert client.get("/api/workbook/subject").json() == saved
+    assert client.put("/api/workbook/subject", json={"kind": "property", "key": "nope"}).status_code == 404
+
+    r = client.get("/api/workbook/regression", params={"subject_pin": SUBJECT_PIN}).json()
+    assert r["subject_kind"] == "property" and r["regression"]["expected"] is None
+    assert r["inputs"]["garage_adjustment"] == 0  # the workbook's $225,000 is never carried over
+    a, b, c = r["variants"]
+    assert a["estimate"] == r["inputs"]["finished_sf"] * a["ppsf"]["mean"]  # workbook formula on this subject's area
+    live = client.post("/api/cma/analyze", json={"subject_pin": SUBJECT_PIN}).json()["valuation"]["estimate"]
+    assert c["variant"] == "C" and abs(c["estimate"] - live) < 0.01  # same figures as the CMA page
+
+    # the workbook's own subjects still reproduce the workbook total
+    client.put("/api/workbook/subject", json={"kind": "workbook", "key": "1009 New"})
+    assert client.get("/api/workbook/regression", params={"subject": "1009 New"}).json()["regression"]["passed"]
