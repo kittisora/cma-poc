@@ -118,6 +118,42 @@ def render_pdf(r: dict) -> bytes:
         img = Image(io.BytesIO(base64.b64decode(r["map_png_b64"])), width=width, height=width * 0.56)
         story.append(KeepTogether([P("Location of comparable sales", h2), img]))
 
+    # estimated prices (the workbook's bottom block)
+    pt = r.get("price_table") or []
+    if pt:
+        story.append(P("Estimated prices", h2))
+        hdr = ["Method", "Lot sf", "Fin sf", "Average", "Median", "High", "Low",
+               "Mean value" if pt[0]["statistic"] == "mean" else "Mean value (median)", "Apprec.",
+               "Add for garage/ADU", "SF", "Total"]
+        add_sf = sum(a.get("sf") or 0 for a in r["adjustments"]) or None
+        tiny_bold = ParagraphStyle("tinyb", parent=tiny, fontName="Helvetica-Bold", fontSize=7.5)
+        rows = [[P(h, tiny) for h in hdr]]
+        m = lambda x: "—" if x is None else f"${x:,.0f}"  # noqa: E731
+        for t in pt:
+            rows.append([P(t["label"] + (" (headline)" if t["primary"] else ""), tiny),
+                         P(f"{t['lot_sf']:,}" if t["lot_sf"] else "—", tiny), P(f"{t['subject_area']:,.0f}", tiny),
+                         P(m(t["indicated"]["mean"]), tiny), P(m(t["indicated"]["median"]), tiny),
+                         P(m(t["indicated"]["high"]), tiny), P(m(t["indicated"]["low"]), tiny),
+                         P(m(t["mean_value"]), tiny),
+                         P(f"{t['appreciation_pct']:g}%" + (f" {m(t['appreciation_amount'])}"
+                                                            if t["appreciation_amount"] else ""), tiny),
+                         P(m(t["adjustments_total"]), tiny), P(f"{add_sf:,.0f}" if add_sf else "—", tiny),
+                         P(m(t["total"]), tiny_bold)])
+        cw = [1.25, 0.45, 0.45, 0.72, 0.72, 0.72, 0.72, 0.75, 0.62, 0.72, 0.36, 0.85]
+        scale = width / (sum(cw) * inch)
+        et = Table(rows, colWidths=[w * inch * scale for w in cw], repeatRows=1)
+        et.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#FFC000")),
+            ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FFFF99")),
+            ("BACKGROUND", (-1, 1), (-1, -1), colors.HexColor("#FFC000")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(et)
+        story.append(P("Average/Median/High/Low = subject finished sq ft × comp $/sf statistic. "
+                       "Total = mean value + appreciation + garage/ADU and other adjustments.", tiny))
+
     # method
     story.append(P("How the estimate was calculated", h2))
     for line in r["method_lines"]:

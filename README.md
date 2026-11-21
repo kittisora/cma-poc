@@ -1,10 +1,10 @@
-# CMA — Fairfax County 22308 / 22309
+# CMA
 
-A comparative market analysis web app for a real estate team. Enter an address and the app:
+A comparative market analysis web app for a real estate team. Pick a property by subdivision, block and street, and the app:
 - finds recorded comparable sales on or before the valuation date
 - ranks them by similarity, with no regard to price
 - prices the subject with the team's workbook method (price per sq ft)
-- exports a branded PDF or Word report
+- exports a branded PDF or Excel report (the Excel report follows the team's CMA workbook layout)
 
 Data comes from **Fairfax County public records** (Department of Tax Administration and the Master Address
 Repository, published on ArcGIS Online). It is not MLS data. The data layer is pluggable, so an approved MLS feed
@@ -47,8 +47,9 @@ The key stays on the server and is never sent to the browser. Everything else wo
 
 ## Using it
 
-1. **CMA** page: type an address (Ctrl+K focuses the box; filter by ZIP if needed) and pick the match, or click one
-   of the example buttons. Set the valuation date with the calendar. Comps and pricing appear in about 1–3 s.
+1. **CMA** page: choose a **Subdivision**, **Block** and/or **Street** (each narrows the next; Ctrl+K focuses the
+   first box), then pick the **Property**, or click one of the example buttons. Blocks come from the county legal
+   description ("LT 21 BLK A"), so subdivisions without platted blocks show none. Set the valuation date with the calendar. Comps and pricing appear in about 1–3 s.
 2. Review the comps:
    - the map, the $/sf chart and the table are linked: click a marker or a bar to highlight the table row
    - each comp has a score bar and a reason; the arrow opens a side panel with the factor breakdown and the county
@@ -63,7 +64,7 @@ The key stays on the server and is never sent to the browser. Everything else wo
 4. **Report**:
    - draft the narrative (AI or template) and edit it
    - set branding
-   - preview, then export PDF or Word
+   - preview, then export PDF or Excel
    - the export refuses if the figures changed since review
 5. **Ask AI** (button on the estimate card; needs `OPENAI_API_KEY`): a side panel chat. The assistant reads the computed
    facts, comps and valuation through tools, cites records, and explains them. It cannot change the numbers.
@@ -85,7 +86,7 @@ In short:
    the workbook method. Adjustments and appreciation are optional and shown as separate lines. Above-grade and total
    finished area are never mixed.
 4. **Review and export.** The agent reviews comps on the map and in the table, edits inputs, and exports a branded PDF
-   or Word report. Export is refused if the figures changed since the agent last reviewed them.
+   or Excel report. Export is refused if the figures changed since the agent last reviewed them.
 5. **AI (optional).** OpenAI reads the computed results through tools to explain them and draft the narrative. It
    cites records and cannot change the numbers. Without a key, a template narrative is used.
 
@@ -102,7 +103,7 @@ backend/app/
     comps/        eligibility funnel + price-blind weighted ranking with reasons
     valuation/    workbook $/sf method (two separate area calculations) + workbook regression
     services.py   one run_cma() used by the API, reports and AI agent, so every surface shows the same figures
-    reports/      one report model → PDF (reportlab) and Word (python-docx); local location diagram
+    reports/      one report model → PDF (reportlab) and Excel (XlsxWriter, workbook layout with live formulas); local location diagram
     agent/        AI tool loop over the computed CMA: OpenAI (default) or Anthropic; template narrative fallback
     api/          FastAPI routes
 alembic/          migrations

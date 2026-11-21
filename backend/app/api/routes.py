@@ -23,6 +23,7 @@ from ..models import SavedCMA, utcnow
 from ..reports.model import Branding, FiguresChanged, ReportRequest, build_report, public_model
 from ..reports.render_docx import render_docx
 from ..reports.render_pdf import render_pdf
+from ..reports.render_xlsx import render_xlsx
 from ..services import CMARequest, NotFound, run_cma
 from ..sources.registry import get_provider
 from ..valuation.workbook import regression_report
@@ -71,6 +72,23 @@ def search(q: str = Query(..., min_length=2), zip: str | None = None, limit: int
     t0 = time.perf_counter()
     results = repo.search_addresses(session, q, zip or None, min(limit, 50))
     return {"results": results, "timing_ms": round((time.perf_counter() - t0) * 1000, 1)}
+
+
+@router.get("/search/areas")
+def search_areas(subdivision: str | None = None, block: str | None = None, zip: str | None = None,
+                 session: Session = Depends(get_session)):
+    """Choices for the Subdivision, Block and Street filters (each narrowed by the ones before it)."""
+    return repo.search_areas(session, subdivision, block, zip or None)
+
+
+@router.get("/search/properties")
+def search_properties(subdivision: str | None = None, block: str | None = None, street: str | None = None,
+                      zip: str | None = None, limit: int = 2000, session: Session = Depends(get_session)):
+    if not any(x and x.strip() for x in (subdivision, block, street)):
+        raise HTTPException(422, "Choose a subdivision, block or street.")
+    t0 = time.perf_counter()
+    out = repo.search_by_area(session, subdivision, block, street, zip or None, max(1, min(limit, 5000)))
+    return {**out, "timing_ms": round((time.perf_counter() - t0) * 1000, 1)}
 
 
 @router.get("/properties/{pin}")
@@ -174,6 +192,15 @@ def report_pdf(req: ReportRequest, session: Session = Depends(get_session)):
     r = _report(session, req)
     return Response(render_pdf(r), media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{_filename(r, "pdf")}"',
+                             "X-CMA-Fingerprint": r["fingerprint"]})
+
+
+@router.post("/reports/xlsx")
+def report_xlsx(req: ReportRequest, session: Session = Depends(get_session)):
+    r = _report(session, req)
+    return Response(render_xlsx(r),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{_filename(r, "xlsx")}"',
                              "X-CMA-Fingerprint": r["fingerprint"]})
 
 

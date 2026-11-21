@@ -1,4 +1,4 @@
-"""Report model shared by the on-screen preview, the PDF and the Word export."""
+"""Report model shared by the on-screen preview and the PDF, Excel and Word exports."""
 
 from __future__ import annotations
 
@@ -72,6 +72,34 @@ def figures_fingerprint(cma: dict) -> str:
     key = {"est": round(v["estimate"] or 0, 2), "lo": round(v["range_low"] or 0, 2),
            "hi": round(v["range_high"] or 0, 2), "sel": cma["selected_sale_ids"], "date": cma["valuation_date"]}
     return hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:12]
+
+
+BASIS_SHORT = {"total_finished": "Total finished sq ft", "above_grade": "Assessor above-grade sq ft"}
+
+
+def price_table(cma: dict) -> list[dict]:
+    """The workbook's "ESTIMATED PRICES" block (rows 24-27), one row per method with enough data.
+
+    AVERAGE / MEDIAN / HIGH / LOW = subject sq ft x comp $/sf statistic; MEAN VALUE is the chosen
+    point statistic; TOTAL = MEAN VALUE + appreciation + garage/ADU and other adjustments.
+    The headline method comes first.
+    """
+    v, s = cma["valuation"], cma["subject"]
+    order = [v["primary_basis"]] + [b for b in ("total_finished", "above_grade") if b != v["primary_basis"]]
+    rows = []
+    for key in order:
+        b = v["bases"].get(key) if key else None
+        if not b or not b["available"]:
+            continue
+        rows.append({
+            "basis": key, "label": BASIS_SHORT[key], "primary": key == v["primary_basis"],
+            "lot_sf": s.get("lot_sf"), "subject_area": b["subject_area"], "n": b["n"],
+            "ppsf": b["ppsf"], "indicated": b["indicated"], "statistic": v["point_statistic"],
+            "mean_value": b["base_value"], "appreciation_pct": v["appreciation_pct"],
+            "appreciation_amount": b["appreciation_amount"], "adjustments_total": b["adjustments_total"],
+            "total": b["estimate"], "range_low": b["range_low"], "range_high": b["range_high"],
+        })
+    return rows
 
 
 def build_report(session: Session, req: ReportRequest, default_branding: Branding) -> dict:
@@ -155,6 +183,7 @@ def build_report(session: Session, req: ReportRequest, default_branding: Brandin
                            "estimate": fmt_money(o["estimate"]) if o["available"] else None,
                            "reason": o["reason_unavailable"], "lines": o["lines"]} for o in other],
         "adjustments": v["adjustments"], "appreciation_pct": v["appreciation_pct"], "comps": comp_rows,
+        "price_table": price_table(cma),
         "map_png_b64": base64.b64encode(map_png).decode() if map_png else None,
         "narrative": req.narrative.strip(), "narrative_source": req.narrative_source,
         "condition_evidence": cma["condition_evidence"], "limitations": cma["warnings"]
@@ -168,6 +197,7 @@ def build_report(session: Session, req: ReportRequest, default_branding: Brandin
         if req.include_sources else [], "disclaimer": DISCLAIMER,
         "fingerprint": figures_fingerprint(cma), "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "_logo_bytes": _decode_logo(b.logo_data_url),
+        "_cma": cma, "_selected": sel,
     }
 
 
