@@ -47,7 +47,8 @@ export function PricingPanel(p: Props) {
                     <InputNumber
                         key={`${s.pin}-${s.total_finished_sf}`}
                         label="Total finished sq ft"
-                        hint="From the listing (agent input)"
+                        hint={s.planned?.includes("total_finished_sf") ? "From the planned house (edit it on the subject card)" : "From the listing (agent input)"}
+                        isReadOnly={s.planned?.includes("total_finished_sf")}
                         placeholder="not in county records"
                         minValue={100}
                         maxValue={30000}

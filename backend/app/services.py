@@ -20,7 +20,7 @@ from .comps.engine import (
     limit_explanation,
     relaxation_hints,
 )
-from .domain import PropertyFacts, SaleFacts
+from .domain import PropertyFacts, SaleFacts, SourceRef
 from .util.dates import subtract_months, today_local
 from .util.text import PROPERTY_TYPE_LABELS
 from .valuation.pricing import (
@@ -35,12 +35,64 @@ MARKET_VALIDITY = {"valid and verified sale", "sale from lender - valid sale pri
                    "valid and verified multi-parcel sale"}
 
 
+class SubjectPlan(BaseModel):
+    """The house the agent is selling or building, when it differs from the county record
+    (for example a new 5-bedroom house replacing an older one). Blank fields keep the county value.
+    Planned values drive comp ranking and pricing and are labelled as agent input everywhere."""
+    property_type: Literal["DETACHED", "TOWNHOUSE", "CONDO", "DUPLEX"] | None = None  # e.g. building on vacant land
+    beds: int | None = Field(None, ge=0, le=20)
+    full_baths: int | None = Field(None, ge=0, le=20)
+    half_baths: int | None = Field(None, ge=0, le=20)
+    above_grade_sf: int | None = Field(None, ge=100, le=30000)
+    total_finished_sf: int | None = Field(None, ge=100, le=30000)
+    year_built: int | None = Field(None, ge=1700, le=2100)
+    style: str | None = Field(None, max_length=60)
+    condition: str | None = Field(None, max_length=40)
+    basement: str | None = Field(None, max_length=60)  # e.g. "Full" or "None"
+    note: str | None = Field(None, max_length=300)
+
+
+PLAN_LABELS = {"property_type": "Property type", "beds": "Bedrooms", "full_baths": "Full baths", "half_baths": "Half baths",
+               "above_grade_sf": "Above-grade living area", "total_finished_sf": "Total finished area",
+               "year_built": "Year built", "style": "Style", "condition": "Condition", "basement": "Basement"}
+PLAN_SOURCE = "planned house (agent input)"
+
+
+def apply_plan(subject: PropertyFacts, plan: SubjectPlan | None) -> dict | None:
+    """Overwrite the subject's facts with the planned house. Returns the county values it replaced."""
+    if plan is None:
+        return None
+    replaced = {}
+    for f in PLAN_LABELS:
+        v = getattr(plan, f)
+        if isinstance(v, str):
+            v = v.strip() or None
+        if v is None:
+            continue
+        replaced[f] = getattr(subject, f)
+        setattr(subject, f, v)
+        subject.planned.append(f)
+    if not replaced:
+        return None
+    if "total_finished_sf" in replaced:
+        subject.total_finished_source = PLAN_SOURCE
+    if "year_built" in replaced:
+        subject.year_remodeled = None  # a remodel date belongs to the house on record
+    changes = ", ".join(f"{PLAN_LABELS[f].lower()} {getattr(subject, f)}" for f in replaced)
+    subject.notes.insert(0, f"Planned house (agent input): {changes}. Comps are ranked and priced against these "
+                            "values, not the county record of the current house.")
+    subject.sources.append(SourceRef("Agent input", "planned house: " + changes + (f" ({plan.note})" if plan.note else ""),
+                                     None, None, kind="agent_input"))
+    return replaced
+
+
 class CMARequest(BaseModel):
     subject_pin: str
     valuation_date: dt.date | None = None
     criteria: CompCriteria = Field(default_factory=CompCriteria)
     selected_sale_ids: list[int] | None = None  # None = use the top-ranked comps
     subject_total_finished_sf: int | None = None
+    plan: SubjectPlan | None = None  # describe a planned / new house; blank fields keep the county record
     comp_total_finished: dict[int, int] = Field(default_factory=dict)  # sale_id -> sq ft
     adjustments: list[Adjustment] = Field(default_factory=list)
     appreciation_pct: float = 0.0
@@ -98,12 +150,18 @@ def run_cma(session: Session, req: CMARequest, with_hints: bool = True) -> dict:
     if req.subject_total_finished_sf:
         subject.total_finished_sf = req.subject_total_finished_sf
         subject.total_finished_source = "agent input (this CMA)"
+    county_values = apply_plan(subject, req.plan)
     c = req.criteria
 
+    start = subtract_months(vdate, c.lookback_months * 2)
     candidates: list = []
     if subject.lat is not None:
-        candidates = repo.get_candidate_sales(session, subject.lat, subject.lon, c.max_distance_miles * 2,
-                                              subtract_months(vdate, c.lookback_months * 2))
+        candidates = repo.get_candidate_sales(session, subject.lat, subject.lon, c.max_distance_miles * 2, start)
+    if c.area_scope != "radius" and (subject.subdivision or "").strip():
+        # the subdivision can reach beyond the radius; add its sales (once each)
+        seen = {s.sale_id for s, _ in candidates}
+        candidates += [x for x in repo.get_candidate_sales_in_subdivision(session, subject.subdivision, start)
+                       if x[0].sale_id not in seen]
     search: CompSearch = find_comps(subject, candidates, vdate, c)
     hints = relaxation_hints(subject, candidates, vdate, c) if (with_hints and search.limited) else []
 
@@ -136,8 +194,10 @@ def run_cma(session: Session, req: CMARequest, with_hints: bool = True) -> dict:
 
     history = repo.get_sale_history(session, subject.pin)
     latest_any, last_market = last_sales(history, vdate)
-    change = change_since_last_sale(valuation.estimate, last_market.price if last_market else None,
-                                    last_market.sale_date.isoformat() if last_market else None)
+    # the last sale was of the house on record; it says nothing about a planned / new house
+    change = None if county_values else change_since_last_sale(
+        valuation.estimate, last_market.price if last_market else None,
+        last_market.sale_date.isoformat() if last_market else None)
 
     shown = search.eligible[: max(req.candidate_limit, len(selected_ids))]
     shown_ids = {rc.sale.sale_id for rc in shown}
@@ -157,12 +217,15 @@ def run_cma(session: Session, req: CMARequest, with_hints: bool = True) -> dict:
 
     return {
         "subject": subject.to_dict(),
+        "plan": req.plan.model_dump() if county_values else None,
+        "county_values": county_values,  # what the planned house replaced, field -> county value
         "subject_label": PROPERTY_TYPE_LABELS.get(subject.property_type, subject.property_type),
         "valuation_date": vdate.isoformat(),
         "criteria": c.model_dump(),
         "validity_options": {"default": c.allowed_validity, "optional": OPTIONAL_VALIDITY},
         "search": {
             "window_start": search.window_start.isoformat(), "pool_count": search.pool_count,
+            "scope": search.scope, "scope_label": search.scope_label,
             "funnel": [f.__dict__ for f in search.funnel], "eligible_count": len(search.eligible),
             "later_sales_excluded": search.later_sales_excluded, "limited": search.limited,
             "insufficient": search.insufficient, "limit_explanation": limit_explanation(search),

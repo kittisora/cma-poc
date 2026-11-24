@@ -92,3 +92,38 @@ def test_subject_own_sale_never_a_comp(loaded):
     _, _, s = _run(loaded, vdate=dt.date(2023, 1, 1), lookback_months=60)
     assert SUBJECT_PIN not in {rc.prop.pin for rc in s.eligible}
     assert _funnel(s)["subject_parcel"] == 1
+
+
+def test_comps_limited_to_subject_subdivision_and_block(loaded):
+    subj, cands, _ = _run(loaded)
+    # put the subject in OAKS block 2; two nearby sales share the subdivision, one also the block
+    subj = replace(subj, subdivision="OAKS", block="2")
+    tagged = []
+    for sale, prop in cands:
+        if prop.pin == "1000 01  0002":
+            prop = replace(prop, subdivision="Oaks ", block="2")
+        elif prop.pin == "1000 01  0003":
+            prop = replace(prop, subdivision="OAKS", block="5")
+        tagged.append((sale, prop))
+    by_sub = find_comps(subj, tagged, VALUATION_DATE, CompCriteria(area_scope="subdivision"))
+    assert {rc.prop.pin for rc in by_sub.eligible} == {"1000 01  0002", "1000 01  0003"}
+    assert by_sub.scope == "subdivision" and by_sub.scope_label == "in OAKS"
+    assert by_sub.pool_count == len({s.sale_id for s, p in tagged if (p.subdivision or "").strip().upper() == "OAKS"
+                                     and s.sale_date >= by_sub.window_start})
+    by_block = find_comps(subj, tagged, VALUATION_DATE, CompCriteria(area_scope="block"))
+    assert [rc.prop.pin for rc in by_block.eligible] == ["1000 01  0002"]
+    assert by_block.scope_label == "in OAKS, block 2"
+    assert limit_explanation(by_block).startswith("Only 1 sale") and "in OAKS, block 2" in limit_explanation(by_block)
+    hints = relaxation_hints(subj, tagged, VALUATION_DATE, CompCriteria(area_scope="block"))
+    assert hints[0]["patch"] == {"area_scope": "subdivision"} and hints[0]["eligible"] == 2
+
+
+def test_area_scope_falls_back_when_subject_lacks_data(loaded):
+    subj, cands, radius = _run(loaded)
+    no_block = replace(subj, subdivision="OAKS", block=None)
+    s = find_comps(no_block, cands, VALUATION_DATE, CompCriteria(area_scope="block"))
+    assert s.scope == "subdivision" and any("no block" in w for w in s.warnings)
+    none = replace(subj, subdivision=None, block=None)
+    s = find_comps(none, cands, VALUATION_DATE, CompCriteria(area_scope="subdivision"))
+    assert s.scope == "radius" and len(s.eligible) == len(radius.eligible)
+    assert any("no subdivision" in w for w in s.warnings)

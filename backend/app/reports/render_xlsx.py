@@ -108,9 +108,11 @@ def render_xlsx(r: dict) -> bytes:
         f"Subdivision {s['subdivision']}" if s.get("subdivision") else None,
         s.get("legal_description")] if x)
     ws.write(2, 0, f"Subject: {where}   ({legal})", f_meta)
-    meta = f"Valuation date {r['valuation_date']} · Prepared {r['prepared_on']}"
+    meta = f"Valuation date {r['valuation_date']} · Prepared {r['prepared_on']} · Comparable sales {r['comp_area']}"
     if r.get("prepared_for"):
         meta = f"Prepared for {r['prepared_for']} · {meta}"
+    if s.get("planned"):
+        meta += " · Subject uses planned-house values (agent input)"
     ws.write(3, 0, meta, f_meta)
     logo = r.get("_logo_bytes")
     if logo:
@@ -337,7 +339,6 @@ def render_xlsx(r: dict) -> bytes:
     ss.write(2, 1, "Value", f_head)
     ss.write(2, 2, "Source", f_head)
     srows = list(r["subject_rows"])
-    srows.insert(2, ("Subdivision", s.get("subdivision") or "—", "MAR"))
     srows.insert(3, ("Legal description", s.get("legal_description") or "—", "County legal"))
     for i, (a, b, c) in enumerate(srows, 3):
         ss.write(i, 0, a, f_text)

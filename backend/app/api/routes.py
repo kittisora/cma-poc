@@ -63,6 +63,7 @@ def meta(session: Session = Depends(get_session)):
         "validity_options": {"default": CompCriteria().allowed_validity, "optional": OPTIONAL_VALIDITY},
         "today": today_local().isoformat(),
         "field_map": FIELD_MAP,
+        "subject_options": repo.dwelling_choices(session),
     }
 
 

@@ -153,8 +153,8 @@ export function CmaDashboard() {
             {analysis && (
                 <div className={cx("grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_500px] xl:grid-cols-[minmax(0,1fr)_440px]")} aria-busy={loading}>
                     <div className="flex min-w-0 flex-col gap-6">
-                        <SubjectCard a={analysis} />
-                        <SearchExplanation a={analysis} onApplyHint={cma.applyHint} />
+                        <SubjectCard a={analysis} plan={cma.plan} options={meta.subject_options} onPlan={cma.setPlan} />
+                        <SearchExplanation a={analysis} onApplyHint={cma.applyHint} onScope={(area_scope) => cma.criteria && cma.changeCriteria({ ...cma.criteria, area_scope })} />
                         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[3fr_2fr]">
                             <CompMap
                                 subject={analysis.subject}
@@ -241,6 +241,7 @@ export function CmaDashboard() {
                                     <CriteriaPanel
                                         criteria={cma.criteria}
                                         meta={meta}
+                                        subject={analysis.subject}
                                         onChange={cma.changeCriteria}
                                         onReset={() => cma.changeCriteria(meta.default_criteria)}
                                     />

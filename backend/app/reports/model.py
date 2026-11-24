@@ -117,21 +117,30 @@ def build_report(session: Session, req: ReportRequest, default_branding: Brandin
     pb = v["bases"].get(basis) if basis else None
     other = [x for k, x in v["bases"].items() if k != basis]
 
+    planned = set(s.get("planned") or [])
+
+    def src(county: str, *fields: str) -> str:
+        return "Planned house (agent input)" if planned & set(fields) else county
+
     subject_rows = [
         ("Address", f"{s['address']}, {s.get('city') or ''} VA {s['zip'] or ''}".replace(" ,", ","), "MAR"),
         ("Parcel ID (PARID)", s["pin"], "County"),
-        ("Property type", cma["subject_label"], "County land use"),
-        ("Style", s["style"] or "—", "County dwelling"),
-        ("Year built", s["year_built"] or "—", "County dwelling"),
-        ("Bedrooms", s["beds"] if s["beds"] is not None else "—", "County dwelling"),
-        ("Baths (full/half)", s["baths_label"] or "—", "County dwelling"),
+        ("Subdivision / block", " · ".join(x for x in [s.get("subdivision"), f"Block {s['block']}" if s.get("block")
+                                                        else None] if x) or "—", "MAR / county legal"),
+        ("Property type", cma["subject_label"], src("County land use", "property_type")),
+        ("Style", s["style"] or "—", src("County dwelling", "style")),
+        ("Year built", s["year_built"] or "—", src("County dwelling", "year_built")),
+        ("Bedrooms", s["beds"] if s["beds"] is not None else "—", src("County dwelling", "beds")),
+        ("Baths (full/half)", s["baths_label"] or "—", src("County dwelling", "full_baths", "half_baths")),
         ("Above-grade living area", f"{fmt_int(s['above_grade_sf'])} sf" if s["above_grade_sf"] else "—",
-         "County assessor (SFLA)"),
+         src("County assessor (SFLA)", "above_grade_sf")),
+        ("Basement", s["basement"] or "—", src("County dwelling", "basement")),
         ("Basement rec room", f"{fmt_int(s['rec_room_sf'])} sf" if s["rec_room_sf"] else "—", "County dwelling"),
         ("Total finished area", f"{fmt_int(s['total_finished_sf'])} sf" if s["total_finished_sf"] else "Not recorded",
          s["total_finished_source"] or "—"),
         ("Lot size", f"{fmt_int(s['lot_sf'])} sf ({s['lot_acres']} ac)" if s["lot_sf"] else "—", "County land"),
-        ("Assessor condition / grade", f"{s['condition'] or '—'} / {s['grade'] or '—'}", "County dwelling"),
+        ("Assessor condition / grade", f"{s['condition'] or '—'} / {s['grade'] or '—'}",
+         src("County dwelling", "condition")),
         ("Garage (recorded)", s["garage_evidence"] or "Not recorded", "County additions"),
         (f"Assessed value ({s['assessed_tax_year']})", fmt_money(s["assessed_total"]), "County assessment"),
     ]
@@ -176,6 +185,7 @@ def build_report(session: Session, req: ReportRequest, default_branding: Brandin
     }
     return {
         "title": req.title or f"Comparative Market Analysis — {s['address']}",
+        "comp_area": cma["search"]["scope_label"],
         "prepared_for": req.prepared_for, "prepared_on": today_local().isoformat(),
         "valuation_date": cma["valuation_date"], "branding": b.model_dump(), "subject_rows": subject_rows,
         "estimate": estimate_block, "method_lines": pb["lines"] if pb else [],

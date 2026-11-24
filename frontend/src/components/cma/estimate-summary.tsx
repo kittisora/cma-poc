@@ -82,9 +82,11 @@ export function EstimateSummary({ a, aiEnabled, onAskAi }: Props) {
                         </dd>
                     ) : (
                         <dd className="text-sm text-tertiary">
-                            {a.latest_transfer
-                                ? `No arm's-length sale on record (latest transfer ${a.latest_transfer.sale_date}: ${a.latest_transfer.validity}).`
-                                : "No recorded sale of the subject."}
+                            {a.plan
+                                ? "Not shown for a planned house: the last sale was of the house on record."
+                                : a.latest_transfer
+                                  ? `No arm's-length sale on record (latest transfer ${a.latest_transfer.sale_date}: ${a.latest_transfer.validity}).`
+                                  : "No recorded sale of the subject."}
                         </dd>
                     )}
                 </div>

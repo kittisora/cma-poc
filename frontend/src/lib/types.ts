@@ -19,7 +19,11 @@ export interface Weights {
   features: number;
 }
 
+export type AreaScope = "radius" | "subdivision" | "block";
+
 export interface Criteria {
+  /** Where comps may come from: within the radius, or only the subject's subdivision (and block). */
+  area_scope: AreaScope;
   max_distance_miles: number;
   lookback_months: number;
   max_results: number;
@@ -67,6 +71,7 @@ export interface Meta {
     datasets: { key: string; title: string; url: string }[];
   };
   default_criteria: Criteria;
+  subject_options: { styles: string[]; basements: string[]; conditions: string[] };
   validity_options: { default: string[]; optional: string[] };
   field_map: FieldMapRow[];
 }
@@ -101,6 +106,9 @@ export interface Property {
   property_type: string;
   land_use: string | null;
   subdivision: string | null;
+  block: string | null;
+  /** Fields replaced by the agent's planned-house description. */
+  planned: string[];
   style: string | null;
   year_built: number | null;
   effective_year: number | null;
@@ -244,9 +252,14 @@ export interface Analysis {
   subject_label: string;
   valuation_date: string;
   criteria: Criteria;
+  plan: SubjectPlan | null;
+  /** County values the planned house replaced (field -> county value). */
+  county_values: Record<string, string | number | null> | null;
   search: {
     window_start: string;
     pool_count: number;
+    scope: AreaScope;
+    scope_label: string;
     funnel: FunnelStep[];
     eligible_count: number;
     later_sales_excluded: number;
@@ -284,6 +297,22 @@ export interface CMARequest {
   appreciation_pct: number;
   point_statistic: "mean" | "median";
   primary_basis: "auto" | "above_grade" | "total_finished";
+  plan: SubjectPlan | null;
+}
+
+/** The house being sold or built when it differs from the county record. Blank = keep the county value. */
+export interface SubjectPlan {
+  property_type?: "DETACHED" | "TOWNHOUSE" | "CONDO" | "DUPLEX" | null;
+  beds?: number | null;
+  full_baths?: number | null;
+  half_baths?: number | null;
+  above_grade_sf?: number | null;
+  total_finished_sf?: number | null;
+  year_built?: number | null;
+  style?: string | null;
+  condition?: string | null;
+  basement?: string | null;
+  note?: string | null;
 }
 
 export interface Branding {

@@ -24,7 +24,7 @@ from .models import (
 )
 from .sources.fairfax_arcgis import DATASETS
 from .util.geo import bounding_box
-from .util.text import search_tokens
+from .util.text import parse_block, parse_lot, search_tokens
 
 ARCGIS_BASE = "https://services1.arcgis.com/ioennV6PpG5Xodq0/ArcGIS/rest/services"
 
@@ -65,21 +65,9 @@ def search_addresses(session: Session, query: str, zip_code: str | None = None, 
 
 
 # ------------------------------------------------- subdivision / block / street
-# The county legal description carries the block ("MT VERNON TERRACE LT 21 BLK A");
-# the Master Address Repository's own SUBDIVISION_BLOCK is almost never filled in.
-_BLOCK_RE = re.compile(r"\b(?:BLK|BLOCK)\s+([A-Z0-9]+(?:-[A-Z0-9]+)?)\b")
-_LOT_RE = re.compile(r"\b(?:LT|LOT)\s+([A-Z0-9]+(?:-[A-Z0-9]+)?)\b")
+# Blocks come from the county legal description (util.text.parse_block); the Master
+# Address Repository's own SUBDIVISION_BLOCK is almost never filled in.
 _area_cache: dict = {"key": None, "rows": []}
-
-
-def parse_block(legal: str | None) -> str | None:
-    m = _BLOCK_RE.search((legal or "").upper())
-    return m.group(1) if m else None
-
-
-def parse_lot(legal: str | None) -> str | None:
-    m = _LOT_RE.search((legal or "").upper())
-    return m.group(1) if m else None
 
 
 def _natural_key(s: str) -> tuple:
@@ -182,7 +170,7 @@ def build_facts(parcel: Parcel, dwellings: list[Dwelling], additions: list[Dwell
         pin=parcel.pin, address=parcel.primary_address, city=address.city if address else None,
         zip=parcel.zip, lat=parcel.lat, lon=parcel.lon, property_type=parcel.property_type,
         land_use=parcel.land_use, subdivision=address.subdivision if address else None,
-        legal_description=parcel.legal_description, lot_sf=parcel.lot_sf, lot_acres=parcel.lot_acres,
+        block=parse_block(parcel.legal_description), legal_description=parcel.legal_description, lot_sf=parcel.lot_sf, lot_acres=parcel.lot_acres,
         assessed_total=parcel.assessed_total, assessed_tax_year=parcel.assessed_tax_year,
         tax_year=parcel.tax_year, dwelling_count=len(dwellings), garage=garage, garage_evidence=garage_ev,
     )
@@ -285,6 +273,16 @@ def get_candidate_sales(session: Session, lat: float, lon: float, radius_miles: 
     return [(to_sale_facts(s), props[s.pin]) for s in sales if s.pin in props]
 
 
+def get_candidate_sales_in_subdivision(session: Session, subdivision: str,
+                                       start_date: dt.date) -> list[tuple[SaleFacts, PropertyFacts]]:
+    """All recorded transfers from `start_date` onward on parcels addressed in `subdivision`."""
+    pins = select(Address.pin).where(Address.status == "Current",
+                                      func.upper(func.trim(Address.subdivision)) == subdivision.strip().upper())
+    sales = list(session.scalars(select(Sale).where(Sale.sale_date >= start_date, Sale.pin.in_(pins))))
+    props = get_properties(session, {s.pin for s in sales})
+    return [(to_sale_facts(s), props[s.pin]) for s in sales if s.pin in props]
+
+
 # ----------------------------------------------------------- agent inputs
 def set_input(session: Session, pin: str, field_name: str, value, note: str | None = None,
               entered_by: str | None = None) -> None:
@@ -315,6 +313,16 @@ def data_status(session: Session) -> dict:
         "sales": session.scalar(select(func.count()).select_from(Sale)) or 0,
         "latest_sale_date": latest_sale.isoformat() if latest_sale else None,
     }
+
+
+def dwelling_choices(session: Session) -> dict:
+    """County values offered for describing a planned house, most common first."""
+    def common(col) -> list[str]:
+        rows = session.execute(select(col, func.count()).where(col.is_not(None)).group_by(col)
+                               .order_by(func.count().desc()))
+        return [v for v, n in rows if n >= 5]
+    return {"styles": common(Dwelling.style), "basements": common(Dwelling.basement),
+            "conditions": ["Poor", "Fair", "Average", "Average Plus", "Good", "Very Good", "Excellent"]}
 
 
 def get_setting(session: Session, key: str) -> dict | None:

@@ -3,7 +3,7 @@
 import type { PropsWithChildren } from "react";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { Adjustment, Analysis, CMARequest, Criteria, Hint, Meta, SearchResult } from "@/lib/types";
+import type { Adjustment, Analysis, CMARequest, Criteria, Hint, Meta, SearchResult, SubjectPlan } from "@/lib/types";
 
 export type PrimaryBasis = "auto" | "above_grade" | "total_finished";
 export type PointStat = "mean" | "median";
@@ -16,6 +16,7 @@ interface CmaState {
     criteria: Criteria | null;
     selectedIds: number[];
     adjustments: Adjustment[];
+    plan: SubjectPlan | null;
     appreciation: number;
     pointStat: PointStat;
     primaryBasis: PrimaryBasis;
@@ -34,6 +35,7 @@ interface CmaState {
     toggleComp: (id: number, include: boolean) => void;
     resetSelection: () => void;
     setAdjustments: (a: Adjustment[]) => void;
+    setPlan: (p: SubjectPlan | null) => void;
     setAppreciation: (n: number) => void;
     setPointStat: (s: PointStat) => void;
     setPrimaryBasis: (b: PrimaryBasis) => void;
@@ -59,6 +61,7 @@ export function CmaProvider({ children }: PropsWithChildren) {
     const [criteria, setCriteria] = useState<Criteria | null>(null);
     const [manualSelection, setManualSelection] = useState<number[] | null>(null);
     const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+    const [plan, setPlanState] = useState<SubjectPlan | null>(null);
     const [appreciation, setAppreciation] = useState(0);
     const [pointStat, setPointStat] = useState<PointStat>("mean");
     const [primaryBasis, setPrimaryBasis] = useState<PrimaryBasis>("auto");
@@ -94,9 +97,10 @@ export function CmaProvider({ children }: PropsWithChildren) {
                       appreciation_pct: appreciation,
                       point_statistic: pointStat,
                       primary_basis: primaryBasis,
+                      plan,
                   }
                 : null,
-        [subject, criteria, valuationDate, manualSelection, adjustments, appreciation, pointStat, primaryBasis],
+        [subject, criteria, valuationDate, manualSelection, adjustments, appreciation, pointStat, primaryBasis, plan],
     );
 
     // Re-run the analysis (debounced) whenever an input changes. Only the latest request wins.
@@ -133,6 +137,7 @@ export function CmaProvider({ children }: PropsWithChildren) {
         setSubject(r);
         setManualSelection(null);
         setAdjustments([]);
+        setPlanState(null);
         setAppreciation(0);
         setNarrativeText("");
         setHighlighted(null);
@@ -152,6 +157,7 @@ export function CmaProvider({ children }: PropsWithChildren) {
         criteria,
         selectedIds: manualSelection ?? analysis?.selected_sale_ids ?? [],
         adjustments,
+        plan,
         appreciation,
         pointStat,
         primaryBasis,
@@ -176,6 +182,11 @@ export function CmaProvider({ children }: PropsWithChildren) {
         },
         resetSelection: () => setManualSelection(null),
         setAdjustments,
+        // a different house ranks different comps: drop any manual comp picks
+        setPlan: (p) => {
+            setPlanState(p);
+            setManualSelection(null);
+        },
         setAppreciation,
         setPointStat,
         setPrimaryBasis,

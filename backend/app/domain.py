@@ -29,6 +29,7 @@ class PropertyFacts:
     property_type: str = "OTHER"
     land_use: str | None = None
     subdivision: str | None = None
+    block: str | None = None  # from the county legal description ("... BLK 7 ...")
     legal_description: str | None = None
     style: str | None = None
     year_built: int | None = None
@@ -55,6 +56,8 @@ class PropertyFacts:
     tax_year: int | None = None
     total_finished_sf: int | None = None
     total_finished_source: str | None = None
+    # fields replaced by the agent's description of a planned / new house (see services.SubjectPlan)
+    planned: list[str] = field(default_factory=list)
     agent_inputs: dict = field(default_factory=dict)
     sources: list[SourceRef] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)

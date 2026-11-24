@@ -75,7 +75,7 @@ def render_pdf(r: dict) -> bytes:
     # estimate box
     e = r["estimate"]
     est_lines = [P("Estimated value", small), P(e["estimate"], big), P(f"Range {e['range']}", body),
-                 P(f"Method: {e['basis']} ({e['statistic']})", small)]
+                 P(f"Method: {e['basis']} ({e['statistic']}) · comparable sales {r['comp_area']}", small)]
     if e.get("change"):
         ch = e["change"]
         est_lines.append(P(f"{ch['label']}: {'+' if ch['amount'] >= 0 else '-'}${abs(ch['amount']):,.0f} "

@@ -20,6 +20,7 @@ from __future__ import annotations
 import datetime as dt
 from collections import Counter
 from dataclasses import dataclass, field
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,7 +49,14 @@ class CompWeights(BaseModel):
     features: float = 5
 
 
+AreaScope = Literal["radius", "subdivision", "block"]
+
+
 class CompCriteria(BaseModel):
+    # Where comps may come from: within `max_distance_miles` of the subject, or only from the
+    # subject's own subdivision (community), or its subdivision and block. The radius does not
+    # apply to the subdivision/block scopes.
+    area_scope: AreaScope = "radius"
     max_distance_miles: float = Field(1.0, gt=0, le=10)
     lookback_months: int = Field(12, ge=1, le=60)
     max_results: int = Field(5, ge=1, le=25)
@@ -119,6 +127,8 @@ class CompSearch:
     funnel: list[FunnelStep]
     eligible: list[RankedComp]
     later_sales_excluded: int
+    scope: str = "radius"  # the area rule actually applied (may fall back when the subject lacks data)
+    scope_label: str = ""
     hints: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
@@ -338,18 +348,26 @@ def find_comps(subject: PropertyFacts, candidates: list[tuple[SaleFacts, Propert
     c = criteria
     window_start = subtract_months(valuation_date, c.lookback_months)
     allowed = {v.lower() for v in c.allowed_validity}
+    scope, scope_label, scope_warnings = resolve_scope(subject, c)
 
-    # Window: recorded from window_start onward, within the search radius.
+    # Window: recorded from window_start onward, within the search radius or the subject's area.
     pool: list[tuple[SaleFacts, PropertyFacts, float | None]] = []
     no_location = 0
+    sub = _norm(subject.subdivision)
     for sale, prop in candidates:
         if sale.sale_date < window_start:
             continue
-        if subject.lat is None or prop.lat is None:
-            no_location += 1
+        if scope != "radius" and (_norm(prop.subdivision) != sub
+                                  or (scope == "block" and (prop.block or "") != subject.block)):
             continue
-        d = haversine_miles(subject.lat, subject.lon, prop.lat, prop.lon)
-        if d <= c.max_distance_miles:
+        if subject.lat is None or prop.lat is None:
+            if scope == "radius":
+                no_location += 1
+                continue
+            d = None
+        else:
+            d = haversine_miles(subject.lat, subject.lon, prop.lat, prop.lon)
+        if scope != "radius" or d <= c.max_distance_miles:
             pool.append((sale, prop, d))
     pool_count = len(pool)
     funnel: list[FunnelStep] = []
@@ -426,7 +444,9 @@ def find_comps(subject: PropertyFacts, candidates: list[tuple[SaleFacts, Propert
         rc.rank = i
 
     result = CompSearch(subject=subject, valuation_date=valuation_date, criteria=c, window_start=window_start,
-                        pool_count=pool_count, funnel=funnel, eligible=ranked, later_sales_excluded=later)
+                        pool_count=pool_count, funnel=funnel, eligible=ranked, later_sales_excluded=later,
+                        scope=scope, scope_label=scope_label)
+    result.warnings.extend(scope_warnings)
     if no_location:
         result.warnings.append(f"{no_location} transfer(s) on parcels without a mapped address point were not "
                                "considered.")
@@ -438,6 +458,27 @@ def find_comps(subject: PropertyFacts, candidates: list[tuple[SaleFacts, Propert
     return result
 
 
+def _norm(s: str | None) -> str:
+    return (s or "").strip().upper()
+
+
+def resolve_scope(subject: PropertyFacts, c: CompCriteria) -> tuple[str, str, list[str]]:
+    """(scope applied, plain label, warnings). Falls back when the subject has no subdivision/block."""
+    radius = ("radius", f"within {c.max_distance_miles:g} mi", [])
+    if c.area_scope == "radius":
+        return radius
+    if not _norm(subject.subdivision):
+        return (*radius[:2], ["The subject has no subdivision on record, so comps were searched within "
+                              f"{c.max_distance_miles:g} mi instead."])
+    sub = subject.subdivision.strip()
+    if c.area_scope == "block":
+        if subject.block:
+            return "block", f"in {sub}, block {subject.block}", []
+        return "subdivision", f"in {sub}", ["The subject's legal description has no block, so comps were "
+                                            f"searched in the whole subdivision ({sub})."]
+    return "subdivision", f"in {sub}", []
+
+
 def limit_explanation(search: CompSearch) -> str | None:
     """Plain-language explanation when fewer than `max_results` comps qualify."""
     if not search.limited:
@@ -446,7 +487,7 @@ def limit_explanation(search: CompSearch) -> str | None:
     biggest = sorted([f for f in search.funnel if f.removed], key=lambda f: -f.removed)[:3]
     filt = "; ".join(f"{f.label.lower()} removed {f.removed}" for f in biggest)
     msg = (f"Only {n} sale{'s' if n != 1 else ''} met every rule (target {c.max_results}). "
-           f"The search started with {search.pool_count} recorded transfers within {c.max_distance_miles:g} mi "
+           f"The search started with {search.pool_count} recorded transfers {search.scope_label} "
            f"from {search.window_start.isoformat()} onward")
     msg += f"; {filt}." if filt else "."
     if search.insufficient:
@@ -456,11 +497,19 @@ def limit_explanation(search: CompSearch) -> str | None:
 
 def relaxation_hints(subject: PropertyFacts, candidates, valuation_date: dt.date, criteria: CompCriteria) -> list[dict]:
     """How many sales would qualify if one rule were widened. Never changes the selection."""
-    base = len(find_comps(subject, candidates, valuation_date, criteria).eligible)
+    base_search = find_comps(subject, candidates, valuation_date, criteria)
+    base = len(base_search.eligible)
     trials = []
-    for label, patch in [
-        (f"Widen radius to {criteria.max_distance_miles * 1.5:g} mi", {"max_distance_miles": criteria.max_distance_miles * 1.5}),
-        (f"Widen radius to {criteria.max_distance_miles * 2:g} mi", {"max_distance_miles": criteria.max_distance_miles * 2}),
+    if base_search.scope == "radius":
+        area = [
+            (f"Widen radius to {criteria.max_distance_miles * 1.5:g} mi", {"max_distance_miles": criteria.max_distance_miles * 1.5}),
+            (f"Widen radius to {criteria.max_distance_miles * 2:g} mi", {"max_distance_miles": criteria.max_distance_miles * 2}),
+        ]
+    elif base_search.scope == "block":
+        area = [(f"Use the whole subdivision ({subject.subdivision})", {"area_scope": "subdivision"})]
+    else:
+        area = [(f"Search within {criteria.max_distance_miles:g} mi instead of the subdivision", {"area_scope": "radius"})]
+    for label, patch in area + [
         (f"Extend look-back to {criteria.lookback_months * 2} months", {"lookback_months": criteria.lookback_months * 2}),
         ("Allow any living-area difference", {"living_area_tolerance_pct": None}),
         ("Include 'Pending verification' sales",

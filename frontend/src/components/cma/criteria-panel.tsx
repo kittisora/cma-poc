@@ -7,7 +7,8 @@ import { Checkbox } from "@/components/base/checkbox/checkbox";
 import { InputNumber } from "@/components/base/input/input-number";
 import { Slider } from "@/components/base/slider/slider";
 import { Toggle } from "@/components/base/toggle/toggle";
-import type { Criteria, Meta, Weights } from "@/lib/types";
+import type { Criteria, Meta, Property, Weights } from "@/lib/types";
+import { ScopePicker } from "./scope-picker";
 
 const WEIGHT_LABELS: Record<keyof Weights, string> = {
     distance: "Distance",
@@ -25,6 +26,7 @@ const WEIGHT_LABELS: Record<keyof Weights, string> = {
 interface Props {
     criteria: Criteria;
     meta: Meta;
+    subject?: Property | null;
     onChange: (c: Criteria) => void;
     onReset: () => void;
 }
@@ -52,7 +54,7 @@ function WeightSlider({ labelledBy, value, onCommit }: { labelledBy: string; val
     );
 }
 
-export function CriteriaPanel({ criteria: c, meta, onChange, onReset }: Props) {
+export function CriteriaPanel({ criteria: c, meta, subject, onChange, onReset }: Props) {
     const set = (patch: Partial<Criteria>) => onChange({ ...c, ...patch });
     const allValidity = [...meta.validity_options.default, ...meta.validity_options.optional];
     const totalWeight = Object.values(c.weights).reduce((s, w) => s + w, 0);
@@ -61,8 +63,18 @@ export function CriteriaPanel({ criteria: c, meta, onChange, onReset }: Props) {
         <div className="flex flex-col gap-6">
             <fieldset className="flex flex-col gap-4">
                 <legend className="mb-1 text-sm font-semibold text-primary">Eligibility rules</legend>
+                <ScopePicker value={c.area_scope} radiusMiles={c.max_distance_miles} subject={subject} onChange={(area_scope) => set({ area_scope })} />
                 <div className="grid grid-cols-2 gap-4">
-                    <InputNumber label="Radius (miles)" minValue={0.1} maxValue={10} step={0.1} value={c.max_distance_miles} onChange={(n) => set({ max_distance_miles: num(n, 1) })} />
+                    <InputNumber
+                        label="Radius (miles)"
+                        hint={c.area_scope !== "radius" ? "Not used for subdivision/block searches" : undefined}
+                        isDisabled={c.area_scope !== "radius"}
+                        minValue={0.1}
+                        maxValue={10}
+                        step={0.1}
+                        value={c.max_distance_miles}
+                        onChange={(n) => set({ max_distance_miles: num(n, 1) })}
+                    />
                     <InputNumber label="Look-back (months)" minValue={1} maxValue={60} value={c.lookback_months} onChange={(n) => set({ lookback_months: num(n, 12) })} />
                     <InputNumber label="Comps to select" minValue={1} maxValue={25} value={c.max_results} onChange={(n) => set({ max_results: num(n, 5) })} />
                     <InputNumber label="Minimum comps" minValue={1} maxValue={10} value={c.min_comps} onChange={(n) => set({ min_comps: num(n, 3) })} />

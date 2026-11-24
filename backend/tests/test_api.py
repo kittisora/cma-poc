@@ -315,3 +315,36 @@ def test_workbook_check_with_a_property_subject(client):
     # the workbook's own subjects still reproduce the workbook total
     client.put("/api/workbook/subject", json={"kind": "workbook", "key": "1009 New"})
     assert client.get("/api/workbook/regression", params={"subject": "1009 New"}).json()["regression"]["passed"]
+
+
+def test_planned_house_drives_ranking_and_is_labelled(client):
+    body = {"subject_pin": SUBJECT_PIN, "valuation_date": VALUATION_DATE.isoformat()}
+    county = client.post("/api/cma/analyze", json=body).json()
+    plan = {"beds": 5, "full_baths": 4, "half_baths": 1, "above_grade_sf": 2200, "year_built": 2026,
+            "condition": "Excellent", "style": "  "}
+    planned = client.post("/api/cma/analyze", json={**body, "plan": plan}).json()
+    s = planned["subject"]
+    assert (s["beds"], s["baths_label"], s["above_grade_sf"], s["year_built"]) == (5, "4/1", 2200, 2026)
+    assert s["style"] == county["subject"]["style"]  # blank fields keep the county value
+    assert set(s["planned"]) == {"beds", "full_baths", "half_baths", "above_grade_sf", "year_built", "condition"}
+    assert planned["county_values"]["beds"] == county["subject"]["beds"]
+    assert s["notes"][0].startswith("Planned house (agent input)")
+    # comps are compared with the planned house, not the county record
+    beds = next(f for f in planned["comps"][0]["factors"] if f["key"] == "beds")
+    assert beds["subject_value"] == "5"
+    assert planned["valuation"]["bases"]["above_grade"]["subject_area"] == 2200
+    assert county["change_since_last_sale"] and planned["change_since_last_sale"] is None
+    preview = client.post("/api/reports/preview", json={"cma": {**body, "plan": plan}}).json()
+    rows = {r[0]: r for r in preview["subject_rows"]}
+    assert rows["Bedrooms"][1:] == [5, "Planned house (agent input)"]
+    assert rows["Style"][2] == "County dwelling"
+    assert any(src["kind"] == "agent_input" and "planned house" in src["record_id"] for src in preview["sources"])
+    # an empty plan changes nothing
+    same = client.post("/api/cma/analyze", json={**body, "plan": {}}).json()
+    assert same["plan"] is None and same["valuation"]["estimate"] == county["valuation"]["estimate"]
+    assert client.post("/api/cma/analyze", json={**body, "plan": {"beds": -1}}).status_code == 422
+
+
+def test_meta_offers_planned_house_choices(client):
+    opts = client.get("/api/meta").json()["subject_options"]
+    assert "2 Story" in opts["styles"] and "Excellent" in opts["conditions"]

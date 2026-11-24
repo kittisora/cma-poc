@@ -60,3 +60,18 @@ def fmt_money(v: float | int | None, cents: bool = False) -> str:
 
 def fmt_int(v: float | int | None) -> str:
     return "—" if v is None else f"{round(v):,}"
+
+
+# The county legal description carries the lot and block ("MT VERNON TERRACE LT 21 BLK A").
+_BLOCK_RE = re.compile(r"\b(?:BLK|BLOCK)\s+([A-Z0-9]+(?:-[A-Z0-9]+)?)\b")
+_LOT_RE = re.compile(r"\b(?:LT|LOT)\s+([A-Z0-9]+(?:-[A-Z0-9]+)?)\b")
+
+
+def parse_block(legal: str | None) -> str | None:
+    m = _BLOCK_RE.search((legal or "").upper())
+    return m.group(1) if m else None
+
+
+def parse_lot(legal: str | None) -> str | None:
+    m = _LOT_RE.search((legal or "").upper())
+    return m.group(1) if m else None

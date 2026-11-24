@@ -50,6 +50,11 @@ The key stays on the server and is never sent to the browser. Everything else wo
 1. **CMA** page: choose a **Subdivision**, **Block** and/or **Street** (each narrows the next; Ctrl+K focuses the
    first box), then pick the **Property**, or click one of the example buttons. Blocks come from the county legal
    description ("LT 21 BLK A"), so subdivisions without platted blocks show none. Set the valuation date with the calendar. Comps and pricing appear in about 1–3 s.
+   - **Selling or building a different house than the county record?** Click "Describe house to sell / build" on the
+     subject card and enter the planned property type, beds, baths, sq ft, year built, style, condition and basement.
+     Comps are then ranked and priced against the planned house; reports label those values as agent input.
+   - **Comps from**: within the radius (default 1 mi), the subject's **same subdivision** (community), or its **same
+     block**. Shown on the search summary and under "Search rules".
 2. Review the comps:
    - the map, the $/sf chart and the table are linked: click a marker or a bar to highlight the table row
    - each comp has a score bar and a reason; the arrow opens a side panel with the factor breakdown and the county
