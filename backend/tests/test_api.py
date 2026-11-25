@@ -36,6 +36,7 @@ def test_normal_path_address_to_downloaded_reports(client):
     preview = client.post("/api/reports/preview", json=report).json()
     assert preview["estimate"]["raw"]["estimate"] == est2
     assert preview["narrative"] == "Reviewed narrative."
+    assert preview["comp_area"].startswith("within 1 mi, sold in the last year (")
     assert any(s["kind"] == "agent_input" for s in preview["sources"])
 
     pdf = client.post("/api/reports/pdf", json=report)

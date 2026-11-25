@@ -8,6 +8,7 @@ import { InputNumber } from "@/components/base/input/input-number";
 import { Slider } from "@/components/base/slider/slider";
 import { Toggle } from "@/components/base/toggle/toggle";
 import type { Criteria, Meta, Property, Weights } from "@/lib/types";
+import { LookbackPicker } from "./lookback-picker";
 import { ScopePicker } from "./scope-picker";
 
 const WEIGHT_LABELS: Record<keyof Weights, string> = {
@@ -64,6 +65,7 @@ export function CriteriaPanel({ criteria: c, meta, subject, onChange, onReset }:
             <fieldset className="flex flex-col gap-4">
                 <legend className="mb-1 text-sm font-semibold text-primary">Eligibility rules</legend>
                 <ScopePicker value={c.area_scope} radiusMiles={c.max_distance_miles} subject={subject} onChange={(area_scope) => set({ area_scope })} />
+                <LookbackPicker months={c.lookback_months} onChange={(lookback_months) => set({ lookback_months })} />
                 <div className="grid grid-cols-2 gap-4">
                     <InputNumber
                         label="Radius (miles)"

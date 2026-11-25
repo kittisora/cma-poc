@@ -131,8 +131,8 @@ export function CmaDashboard() {
                     <EmptyState.Content>
                         <EmptyState.Title>Find Comparable to Subjects Properties</EmptyState.Title>
                         <EmptyState.Description>
-                            Choose a subdivision, block or street, then pick the property. The app finds recorded sales on or before the valuation date, ranks them
-                            by similarity (never by price), and prices the subject with the workbook&apos;s price-per-square-foot method.
+                            Choose a subdivision, block or street, then pick the property. The app finds recorded sales on or before the valuation date, ranks
+                            them by similarity (never by price), and prices the subject with the workbook&apos;s price-per-square-foot method.
                         </EmptyState.Description>
                     </EmptyState.Content>
                     <EmptyState.Footer className="flex-wrap justify-center">
@@ -151,10 +151,15 @@ export function CmaDashboard() {
             )}
 
             {analysis && (
-                <div className={cx("grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_500px] xl:grid-cols-[minmax(0,1fr)_440px]")} aria-busy={loading}>
+                <div className={cx("grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_500px]")} aria-busy={loading}>
                     <div className="flex min-w-0 flex-col gap-6">
                         <SubjectCard a={analysis} plan={cma.plan} options={meta.subject_options} onPlan={cma.setPlan} />
-                        <SearchExplanation a={analysis} onApplyHint={cma.applyHint} onScope={(area_scope) => cma.criteria && cma.changeCriteria({ ...cma.criteria, area_scope })} />
+                        <SearchExplanation
+                            a={analysis}
+                            onApplyHint={cma.applyHint}
+                            onScope={(area_scope) => cma.criteria && cma.changeCriteria({ ...cma.criteria, area_scope })}
+                            onLookback={(lookback_months) => cma.criteria && cma.changeCriteria({ ...cma.criteria, lookback_months })}
+                        />
                         <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[3fr_2fr]">
                             <CompMap
                                 subject={analysis.subject}
@@ -181,7 +186,10 @@ export function CmaDashboard() {
                         />
                     </div>
 
-                    <aside aria-label="Valuation and report" className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:self-start xl:overflow-y-auto xl:pb-2">
+                    <aside
+                        aria-label="Valuation and report"
+                        className="flex min-w-0 flex-col gap-4 *:shrink-0 xl:sticky xl:top-20 xl:max-h-[calc(100dvh-6rem)] xl:self-start xl:overflow-y-auto xl:pb-2"
+                    >
                         <EstimateSummary a={analysis} aiEnabled={meta.ai_enabled} onAskAi={() => setAskOpen(true)} />
 
                         {analysis.warnings.length > 0 && (

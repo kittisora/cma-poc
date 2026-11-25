@@ -55,6 +55,8 @@ The key stays on the server and is never sent to the browser. Everything else wo
      Comps are then ranked and priced against the planned house; reports label those values as agent input.
    - **Comps from**: within the radius (default 1 mi), the subject's **same subdivision** (community), or its **same
      block**. Shown on the search summary and under "Search rules".
+   - **Sold within the last**: 3 months, 6 months, 1 year (default) or 2 years, next to "Comps from". Any other
+     period can be typed under "Search rules" (Look-back). Reports state the area and period used.
 2. Review the comps:
    - the map, the $/sf chart and the table are linked: click a marker or a bar to highlight the table row
    - each comp has a score bar and a reason; the arrow opens a side panel with the factor breakdown and the county

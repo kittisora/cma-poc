@@ -102,6 +102,13 @@ def price_table(cma: dict) -> list[dict]:
     return rows
 
 
+def _period(months: int) -> str:
+    if months % 12 == 0:
+        years = months // 12
+        return "year" if years == 1 else f"{years} years"
+    return f"{months} months"
+
+
 def build_report(session: Session, req: ReportRequest, default_branding: Branding) -> dict:
     cma = run_cma(session, req.cma, with_hints=False)
     v = cma["valuation"]
@@ -185,7 +192,8 @@ def build_report(session: Session, req: ReportRequest, default_branding: Brandin
     }
     return {
         "title": req.title or f"Comparative Market Analysis — {s['address']}",
-        "comp_area": cma["search"]["scope_label"],
+        "comp_area": f"{cma['search']['scope_label']}, sold in the last {_period(cma['criteria']['lookback_months'])} "
+                     f"({cma['search']['window_start']} to {cma['valuation_date']})",
         "prepared_for": req.prepared_for, "prepared_on": today_local().isoformat(),
         "valuation_date": cma["valuation_date"], "branding": b.model_dump(), "subject_rows": subject_rows,
         "estimate": estimate_block, "method_lines": pb["lines"] if pb else [],
