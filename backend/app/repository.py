@@ -17,12 +17,14 @@ from .models import (
     Dwelling,
     DwellingAddition,
     Parcel,
+    Permit,
     PropertyInput,
     RefreshRun,
     Sale,
     utcnow,
 )
 from .sources.fairfax_arcgis import DATASETS
+from .util.dates import subtract_months, today_local
 from .util.geo import bounding_box
 from .util.text import parse_block, parse_lot, search_tokens
 
@@ -97,15 +99,17 @@ def _area_rows(session: Session) -> list[dict]:
     return rows
 
 
-def _area_filter(rows: list[dict], subdivision: str | None, block: str | None, street: str | None,
-                 zip_code: str | None) -> list[dict]:
+def _area_filter(rows: list[dict], subdivision: str | None, block: str | None,
+                 street: str | list[str] | None, zip_code: str | None) -> list[dict]:
+    """Filter by subdivision, block, one or more streets, and ZIP (each optional)."""
     def norm(x: str | None) -> str | None:
         return x.strip().upper() if x and x.strip() else None
-    sub, blk, st = norm(subdivision), norm(block), norm(street)
+    sub, blk = norm(subdivision), norm(block)
+    streets = {s for s in (norm(x) for x in ([street] if isinstance(street, str) else (street or []))) if s}
     return [r for r in rows
             if (not sub or (r["subdivision"] or "").upper() == sub)
             and (not blk or (r["block"] or "") == blk)
-            and (not st or (r["street"] or "").upper() == st)
+            and (not streets or (r["street"] or "").upper() in streets)
             and (not zip_code or r["zip"] == zip_code)]
 
 
@@ -130,12 +134,134 @@ def search_areas(session: Session, subdivision: str | None = None, block: str | 
 
 
 def search_by_area(session: Session, subdivision: str | None = None, block: str | None = None,
-                   street: str | None = None, zip_code: str | None = None, limit: int = 2000) -> dict:
+                   street: str | list[str] | None = None, zip_code: str | None = None, limit: int = 2000) -> dict:
     found = _area_filter(_area_rows(session), subdivision, block, street, zip_code)
+    stages = permit_stage_by_pin(session)
     found.sort(key=lambda r: (r["street"] or "", _natural_key(r["street_num"]), _natural_key(r["unit"])))
     keep = ("pin", "address", "city", "zip", "lat", "lon", "property_type", "land_use", "address_id",
             "subdivision", "block", "lot", "street")
-    return {"total": len(found), "results": [{k: r[k] for k in keep} for r in found[:limit]]}
+    return {"total": len(found),
+            "results": [{**{k: r[k] for k in keep}, "permit_stage": stages.get(r["pin"])} for r in found[:limit]]}
+
+
+# ------------------------------------------------------------------ permits
+PERMIT_STAGES = {
+    "active": "Issued / under construction",
+    "pending": "In review (not yet issued)",
+    "completed": "Completed",
+    "stale": "Older than 3 years, no closure recorded",
+    "inactive": "Expired, withdrawn or void",
+}
+ACTIVE_YEARS = 3  # an issued/approved record with no closure after this long is not treated as current work
+_INACTIVE = ("expired", "withdrawn", "void", "cancel", "denied", "disapproved", "refund")
+_DONE = ("closed", "final", "complete", "recorded", "occupancy")
+
+
+def permit_stage(kind: str, status: str | None, issued: dt.date | None, closed: dt.date | None,
+                 submitted: dt.date | None = None, today: dt.date | None = None) -> str:
+    """Plain stage of a permit or site record, from its status in the permitting system.
+
+    Many old records were approved decades ago and never closed in the system, so an open record
+    older than ACTIVE_YEARS is reported as "stale" rather than as current construction.
+    """
+    s = (status or "").strip().lower()
+    if any(k in s for k in _INACTIVE):
+        return "inactive"
+    if closed or any(k in s for k in _DONE):
+        return "completed"
+    started = issued or submitted
+    if started and started < subtract_months(today or today_local(), 12 * ACTIVE_YEARS):
+        return "stale"
+    if kind == "building":
+        return "active" if issued or s.startswith("issued") else "pending"
+    # site records: an approved / bonded plan means work may proceed
+    return "active" if issued or s.startswith(("approved", "bond", "issued")) else "pending"
+
+
+def is_new_construction(app_type: str | None) -> bool:
+    t = (app_type or "").lower()
+    return t.endswith(" new") or "infill lot grading" in t or "subdivision" in t or "record plat" in t
+
+
+def permit_dict(p: Permit) -> dict:
+    return {
+        "kind": p.kind, "record_id": p.record_id, "pin": p.pin, "type": p.app_type, "project": p.project_name,
+        "status": p.status, "stage": permit_stage(p.kind, p.status, p.issued_date, p.closed_date, p.submitted_date),
+        "new_construction": is_new_construction(p.app_type), "address": p.address, "zip": p.zip,
+        "submitted": _d(p.submitted_date), "issued": _d(p.issued_date), "closed": _d(p.closed_date),
+        "status_date": _d(p.status_date), "link": p.link_url, "in_latest_source": p.in_latest_source,
+    }
+
+
+def _d(v: dt.date | None) -> str | None:
+    return v.isoformat() if v else None
+
+
+def _permit_sort(p: dict) -> tuple:
+    return (p["status_date"] or p["submitted"] or "", p["record_id"])
+
+
+def permits_for_pins(session: Session, pins: Iterable[str]) -> dict[str, list[dict]]:
+    pins = list(set(p for p in pins if p))
+    out: dict[str, list[dict]] = defaultdict(list)
+    for i in range(0, len(pins), 900):
+        for p in session.scalars(select(Permit).where(Permit.pin.in_(pins[i:i + 900]))):
+            out[p.pin].append(permit_dict(p))
+    for v in out.values():
+        v.sort(key=_permit_sort, reverse=True)
+    return out
+
+
+def search_permits(session: Session, subdivision: str | None = None, block: str | None = None,
+                   streets: list[str] | None = None, zip_code: str | None = None, stage: str | None = None,
+                   kind: str | None = None, new_only: bool = False, since: dt.date | None = None,
+                   limit: int = 2000) -> dict:
+    """Permits in an area (subdivision / block / streets / ZIP), joined to the address and its location."""
+    area = _area_filter(_area_rows(session), subdivision, block, streets, zip_code)
+    by_pin: dict[str, dict] = {}
+    for r in area:
+        by_pin.setdefault(r["pin"], r)
+    filtered_area = bool(subdivision or block or streets or zip_code)
+    stmt = select(Permit)
+    if kind:
+        stmt = stmt.where(Permit.kind == kind)
+    if since:
+        stmt = stmt.where(or_(Permit.status_date >= since, Permit.submitted_date >= since))
+    rows = []
+    for p in session.scalars(stmt):
+        a = by_pin.get(p.pin)
+        if filtered_area and a is None:
+            continue
+        d = permit_dict(p)
+        if stage and d["stage"] != stage:
+            continue
+        if new_only and not d["new_construction"]:
+            continue
+        d.update({"lat": a["lat"] if a else None, "lon": a["lon"] if a else None,
+                  "subdivision": a["subdivision"] if a else None, "block": a["block"] if a else None,
+                  "street": a["street"] if a else None, "site_address": a["address"] if a else d["address"]})
+        rows.append(d)
+    rows.sort(key=_permit_sort, reverse=True)
+    summary = {"by_stage": defaultdict(int), "by_type": defaultdict(int), "new_construction": defaultdict(int),
+               "parcels": len({r["pin"] for r in rows})}
+    for r in rows:
+        summary["by_stage"][r["stage"]] += 1
+        summary["by_type"][r["type"] or "Other"] += 1
+        if r["new_construction"]:
+            summary["new_construction"][r["stage"]] += 1
+    summary = {k: (dict(sorted(v.items(), key=lambda x: -x[1])) if isinstance(v, dict) else v)
+               for k, v in summary.items()}
+    return {"total": len(rows), "results": rows[:limit], "summary": summary, "stages": PERMIT_STAGES}
+
+
+def permit_stage_by_pin(session: Session) -> dict[str, str]:
+    """The most significant open stage per parcel (active beats pending); used to badge search results."""
+    out: dict[str, str] = {}
+    for p in session.scalars(select(Permit).where(Permit.in_latest_source.is_(True))):
+        st = permit_stage(p.kind, p.status, p.issued_date, p.closed_date, p.submitted_date)
+        if st == "active" or (st == "pending" and out.get(p.pin) != "active"):
+            out[p.pin] = st
+    return out
 
 
 # ---------------------------------------------------------------- property

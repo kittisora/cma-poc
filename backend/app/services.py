@@ -105,8 +105,22 @@ class NotFound(Exception):
     pass
 
 
-def serialize_comp(rc: RankedComp, selected: bool, tf: tuple[int | None, str | None]) -> dict:
+def permit_warnings(sale: SaleFacts, permits: list[dict]) -> list[str]:
+    """A new-house or addition permit after the sale: today's county record may describe the rebuilt house."""
+    out = []
+    for p in permits:
+        when = p["issued"] or p["submitted"]
+        if p["kind"] == "building" and when and when > sale.sale_date.isoformat() and (
+                p["new_construction"] or "addition" in (p["type"] or "").lower()):
+            out.append(f"{p['type']} permit {p['record_id']} ({'issued' if p['issued'] else 'submitted'} {when}) came "
+                       "after this sale; the county record may describe the house after that work, not as sold.")
+    return out
+
+
+def serialize_comp(rc: RankedComp, selected: bool, tf: tuple[int | None, str | None],
+                   permits: list[dict] | None = None) -> dict:
     p, s = rc.prop, rc.sale
+    permits = permits or []
     return {
         "sale_id": s.sale_id, "rank": rc.rank, "score": round(rc.score, 1), "selected": selected,
         "address": p.address, "pin": p.pin, "zip": p.zip, "lat": p.lat, "lon": p.lon,
@@ -117,7 +131,8 @@ def serialize_comp(rc: RankedComp, selected: bool, tf: tuple[int | None, str | N
         "total_finished_sf": tf[0], "total_finished_source": tf[1],
         "ppsf_total_finished": (s.price / tf[0]) if s.price and tf[0] else None,
         "factors": [f.to_dict() for f in rc.factors], "reason": rc.reason, "strengths": rc.strengths,
-        "differences": rc.differences, "missing": rc.missing, "warnings": rc.warnings,
+        "differences": rc.differences, "missing": rc.missing,
+        "warnings": rc.warnings + permit_warnings(s, permits), "permits": permits[:10],
         "source": s.source_ref(repo.layer_url("sales")).to_dict(),
     }
 
@@ -202,6 +217,7 @@ def run_cma(session: Session, req: CMARequest, with_hints: bool = True) -> dict:
     shown = search.eligible[: max(req.candidate_limit, len(selected_ids))]
     shown_ids = {rc.sale.sale_id for rc in shown}
     shown += [rc for rc in selected if rc.sale.sale_id not in shown_ids]
+    permits = repo.permits_for_pins(session, [subject.pin] + [rc.prop.pin for rc in shown])
 
     warnings = list(search.warnings) + list(valuation.warnings)
     if dropped:
@@ -233,8 +249,9 @@ def run_cma(session: Session, req: CMARequest, with_hints: bool = True) -> dict:
         },
         "selection_mode": selection_mode,
         "selected_sale_ids": selected_ids,
-        "comps": [serialize_comp(rc, rc.sale.sale_id in selected_ids, _comp_total_finished(req, rc.sale, rc.prop))
-                  for rc in shown],
+        "comps": [serialize_comp(rc, rc.sale.sale_id in selected_ids, _comp_total_finished(req, rc.sale, rc.prop),
+                                 permits.get(rc.prop.pin)) for rc in shown],
+        "subject_permits": permits.get(subject.pin, []),
         "valuation": valuation.model_dump(),
         "adjustments": [a.model_dump() for a in req.adjustments],
         "appreciation_pct": req.appreciation_pct,

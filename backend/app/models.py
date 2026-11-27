@@ -200,6 +200,40 @@ class Sale(Base):
     in_latest_source: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class Permit(Base):
+    """Building permits and site (land development) records, e.g. Fairfax County PLUS.
+
+    Replaced in place on each refresh (the permitting system is the record of truth);
+    a record that disappears from the source is kept and marked in_latest_source = False.
+    """
+
+    __tablename__ = "permit"
+    __table_args__ = (
+        UniqueConstraint("provider", "kind", "record_id", name="uq_permit_record"),
+        Index("ix_permit_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(20))  # building | site
+    record_id: Mapped[str] = mapped_column(String(40))
+    pin: Mapped[str | None] = mapped_column(String(30), index=True)
+    app_type: Mapped[str | None] = mapped_column(String(120))
+    project_name: Mapped[str | None] = mapped_column(String(300))
+    status: Mapped[str | None] = mapped_column(String(80))
+    status_date: Mapped[dt.date | None] = mapped_column(Date)
+    submitted_date: Mapped[dt.date | None] = mapped_column(Date)
+    issued_date: Mapped[dt.date | None] = mapped_column(Date)
+    closed_date: Mapped[dt.date | None] = mapped_column(Date)
+    address: Mapped[str | None] = mapped_column(String(200))
+    zip: Mapped[str | None] = mapped_column(String(10))
+    link_url: Mapped[str | None] = mapped_column(String(500))
+    raw: Mapped[dict] = mapped_column(JSON, default=dict)
+    retrieved_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_run_id: Mapped[int | None] = mapped_column(ForeignKey("refresh_run.id"))
+    in_latest_source: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
 class SourceRecordHistory(Base):
     """Previous versions of provider records that changed during a refresh."""
 

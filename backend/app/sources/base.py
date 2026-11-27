@@ -139,6 +139,25 @@ class SaleRow:
     financing_terms: str | None = None
 
 
+@dataclass
+class PermitRow:
+    """A building permit or site (land development) record from the jurisdiction's permitting system."""
+    kind: str  # "building" | "site"
+    record_id: str
+    pin: str | None
+    app_type: str | None
+    project_name: str | None
+    status: str | None
+    status_date: dt.date | None
+    submitted_date: dt.date | None
+    issued_date: dt.date | None  # building: issued; site: approved
+    closed_date: dt.date | None
+    address: str | None
+    zip: str | None
+    link_url: str | None
+    raw: dict
+
+
 class DataProvider(Protocol):
     key: str
 
@@ -155,3 +174,6 @@ class DataProvider(Protocol):
     def fetch_additions(self, pins: list[str]) -> list[AdditionRow]: ...
 
     def fetch_sales(self, pins: list[str]) -> list[SaleRow]: ...
+
+    # optional: providers without permit data simply do not define it
+    # def fetch_permits(self, pins: list[str]) -> list[PermitRow]: ...

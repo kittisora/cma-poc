@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { useEffect, useMemo } from "react";
-import { Circle, CircleMarker, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { Circle, CircleMarker, MapContainer, Marker, Tooltip, useMap } from "react-leaflet";
 import { money } from "@/lib/format";
 import type { Comp, Property } from "@/lib/types";
+import { BasemapLayers } from "./basemap-layers";
 
 interface Props {
     subject: Property;
@@ -68,10 +69,7 @@ export default function CompMap({ subject, comps, radiusMiles, highlighted, onSe
             data-testid="comp-map"
         >
             <MapContainer center={[subject.lat, subject.lon]} zoom={15} scrollWheelZoom={false} style={{ height: "100%" }}>
-                <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
+                <BasemapLayers />
                 <FitBounds points={points} />
                 <Circle
                     center={[subject.lat, subject.lon]}

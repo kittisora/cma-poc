@@ -83,12 +83,30 @@ def search_areas(subdivision: str | None = None, block: str | None = None, zip: 
 
 
 @router.get("/search/properties")
-def search_properties(subdivision: str | None = None, block: str | None = None, street: str | None = None,
+def search_properties(subdivision: str | None = None, block: str | None = None,
+                      street: list[str] | None = Query(None, description="One or more street names"),
                       zip: str | None = None, limit: int = 2000, session: Session = Depends(get_session)):
-    if not any(x and x.strip() for x in (subdivision, block, street)):
+    street = [s for s in (street or []) if s and s.strip()]
+    if not any(x and x.strip() for x in (subdivision, block)) and not street:
         raise HTTPException(422, "Choose a subdivision, block or street.")
     t0 = time.perf_counter()
     out = repo.search_by_area(session, subdivision, block, street, zip or None, max(1, min(limit, 5000)))
+    return {**out, "timing_ms": round((time.perf_counter() - t0) * 1000, 1)}
+
+
+@router.get("/permits")
+def permits(subdivision: str | None = None, block: str | None = None,
+            street: list[str] | None = Query(None), zip: str | None = None, pin: str | None = None,
+            stage: str | None = Query(None, pattern="^(active|pending|completed|stale|inactive)$"),
+            kind: str | None = Query(None, pattern="^(building|site)$"), new_only: bool = False,
+            since: dt.date | None = None, limit: int = 2000, session: Session = Depends(get_session)):
+    """Building permits and site records (Fairfax County PLUS) in an area, with a summary by stage and type."""
+    if pin:
+        rows = repo.permits_for_pins(session, [pin]).get(pin, [])
+        return {"total": len(rows), "results": rows, "stages": repo.PERMIT_STAGES}
+    t0 = time.perf_counter()
+    out = repo.search_permits(session, subdivision, block, [s for s in (street or []) if s.strip()], zip or None,
+                              stage, kind, new_only, since, max(1, min(limit, 5000)))
     return {**out, "timing_ms": round((time.perf_counter() - t0) * 1000, 1)}
 
 

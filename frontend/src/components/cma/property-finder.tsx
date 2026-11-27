@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building07, Grid01, Home02, MarkerPin02, XClose } from "@untitledui/icons";
+import { ChevronDown, ChevronUp, Home02, List, XClose } from "@untitledui/icons";
 import { useHotkeys } from "react-hotkeys-hook";
+import { Badge } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { Select } from "@/components/base/select/select";
-import { api } from "@/lib/api";
+import { type AreaFilter, api } from "@/lib/api";
 import { PROPERTY_TYPES } from "@/lib/format";
-import type { AreaOption, SearchResult } from "@/lib/types";
+import type { SearchResult } from "@/lib/types";
+import { cx } from "@/utils/cx";
+import { AreaFilters, hasAreaFilter } from "./area-filters";
+import { PermitStageBadge } from "./permit-badge";
 
 interface Props {
     /** The subject currently analysed (also when chosen elsewhere, e.g. an example button). */
@@ -15,29 +19,19 @@ interface Props {
     onSelect: (r: SearchResult) => void;
 }
 
-const ANY = "__any";
-
-const optionItems = (opts: AreaOption[], noun: string) =>
-    opts.map((o) => ({ id: o.name, label: o.name, supportingText: `${o.count.toLocaleString()} ${noun}${o.count === 1 ? "" : "es"}` }));
+const typeLabel = (r: SearchResult) => PROPERTY_TYPES[r.property_type ?? "OTHER"] ?? r.land_use ?? "";
 
 /**
- * Find the subject by Subdivision → Block → Street, then pick the property.
- * Each filter narrows the next; any one of them is enough to list properties. ⌘K / Ctrl+K focuses it.
+ * Find the subject by Subdivision → Block → Streets (several at once), then pick the property from the
+ * box or from the full list of addresses. ⌘K / Ctrl+K focuses the subdivision box.
  */
 export function PropertyFinder({ current, onSelect }: Props) {
-    const [subdivision, setSubdivision] = useState<string | null>(null);
-    const [block, setBlock] = useState<string | null>(null);
-    const [street, setStreet] = useState<string | null>(null);
-    const [options, setOptions] = useState<{ subdivisions: AreaOption[]; blocks: AreaOption[]; streets: AreaOption[] }>({
-        subdivisions: [],
-        blocks: [],
-        streets: [],
-    });
+    const [area, setArea] = useState<AreaFilter>({ subdivision: null, block: null, streets: [] });
     const [found, setFound] = useState<{ key: string; total: number; results: SearchResult[] }>({ key: "", total: 0, results: [] });
     const [status, setStatus] = useState("");
-    const wrapRef = useRef<HTMLDivElement>(null);
-    // Remounting a ComboBox clears its typed text when its filter is reset.
+    const [showList, setShowList] = useState(false);
     const [resetKey, setResetKey] = useState(0);
+    const wrapRef = useRef<HTMLDivElement>(null);
 
     useHotkeys(
         "mod+k",
@@ -48,26 +42,15 @@ export function PropertyFinder({ current, onSelect }: Props) {
         { enableOnFormTags: true },
     );
 
-    // Filter choices: blocks narrow to the subdivision, streets to the subdivision and block.
-    useEffect(() => {
-        const ctrl = new AbortController();
-        api.areas({ subdivision, block }, ctrl.signal)
-            .then(setOptions)
-            .catch((e: Error) => {
-                if (e.name !== "AbortError") setStatus(`Could not load search filters: ${e.message}`);
-            });
-        return () => ctrl.abort();
-    }, [subdivision, block]);
-
-    const key = JSON.stringify([subdivision, block, street]);
-    const hasFilter = !!(subdivision || block || street);
+    const key = JSON.stringify(area);
+    const hasFilter = hasAreaFilter(area);
     useEffect(() => {
         if (!hasFilter) {
             setStatus("");
             return;
         }
         const ctrl = new AbortController();
-        api.properties({ subdivision, block, street }, ctrl.signal)
+        api.properties(area, ctrl.signal)
             .then((r) => {
                 setFound({ key, total: r.total, results: r.results });
                 setStatus(
@@ -84,7 +67,8 @@ export function PropertyFinder({ current, onSelect }: Props) {
         return () => ctrl.abort();
     }, [key, hasFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const results = found.key === key ? found.results : [];
+    const results = useMemo(() => (found.key === key ? found.results : []), [found, key]);
+    const multiStreet = (area.streets?.length ?? 0) !== 1;
     const propertyItems = useMemo(
         () =>
             results.map((r, i) => ({
@@ -92,89 +76,29 @@ export function PropertyFinder({ current, onSelect }: Props) {
                 label: r.address,
                 supportingText: [
                     r.zip,
-                    PROPERTY_TYPES[r.property_type ?? "OTHER"] ?? r.land_use ?? "",
+                    typeLabel(r),
                     r.lot ? `Lot ${r.lot}` : "",
                     r.block ? `Blk ${r.block}` : "",
-                    !subdivision && r.subdivision ? r.subdivision : "",
+                    !area.subdivision && r.subdivision ? r.subdivision : "",
+                    r.permit_stage === "active" ? "permit issued" : r.permit_stage === "pending" ? "permit in review" : "",
                 ]
                     .filter(Boolean)
                     .join(" · "),
             })),
-        [results, subdivision],
+        [results, area.subdivision],
     );
     const currentId = current ? propertyItems.find((it) => it.id.endsWith(`|${current.pin}`))?.id : undefined;
+    const withPermits = results.filter((r) => r.permit_stage === "active" || r.permit_stage === "pending").length;
 
-    const chooseSubdivision = (v: string | null) => {
-        setSubdivision(v);
-        setBlock(null);
-        setStreet(null);
-    };
-    const chooseBlock = (v: string | null) => {
-        setBlock(v);
-        setStreet(null);
-    };
     const clear = () => {
-        setSubdivision(null);
-        setBlock(null);
-        setStreet(null);
+        setArea({ subdivision: null, block: null, streets: [] });
         setResetKey((k) => k + 1);
+        setShowList(false);
     };
-
-    const blockDisabled = !subdivision || options.blocks.length === 0;
 
     return (
         <div ref={wrapRef} className="flex w-full flex-col gap-3" data-testid="property-finder">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.6fr)_minmax(0,1fr)]">
-                <Select.ComboBox
-                    key={`sub-${resetKey}`}
-                    label="Subdivision"
-                    placeholder="Type to search subdivisions"
-                    icon={Building07}
-                    items={optionItems(options.subdivisions, "address")}
-                    selectedKey={subdivision}
-                    onSelectionChange={(k) => chooseSubdivision(k === null ? null : String(k))}
-                    menuTrigger="focus"
-                >
-                    {(item) => (
-                        <Select.Item id={item.id} supportingText={item.supportingText}>
-                            {item.label}
-                        </Select.Item>
-                    )}
-                </Select.ComboBox>
-                <Select
-                    key={`blk-${resetKey}-${subdivision}`}
-                    label="Block"
-                    placeholder={!subdivision ? "Choose a subdivision first" : blockDisabled ? "No blocks recorded" : "Any block"}
-                    icon={Grid01}
-                    isDisabled={blockDisabled}
-                    selectedKey={block ?? ANY}
-                    onSelectionChange={(k) => chooseBlock(k === null || k === ANY ? null : String(k))}
-                    items={[{ id: ANY, label: "Any block" }, ...optionItems(options.blocks, "address")]}
-                >
-                    {(item) => (
-                        <Select.Item id={item.id} supportingText={item.supportingText}>
-                            {item.label}
-                        </Select.Item>
-                    )}
-                </Select>
-                <Select.ComboBox
-                    key={`st-${resetKey}-${subdivision}-${block}`}
-                    label="Street"
-                    placeholder="Type to search streets"
-                    shortcut={false}
-                    icon={MarkerPin02}
-                    items={optionItems(options.streets, "address")}
-                    selectedKey={street}
-                    onSelectionChange={(k) => setStreet(k === null ? null : String(k))}
-                    menuTrigger="focus"
-                >
-                    {(item) => (
-                        <Select.Item id={item.id} supportingText={item.supportingText}>
-                            {item.label}
-                        </Select.Item>
-                    )}
-                </Select.ComboBox>
-            </div>
+            <AreaFilters value={area} onChange={setArea} resetKey={resetKey} />
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                 <div className="min-w-0 flex-1">
                     <Select.ComboBox
@@ -202,11 +126,90 @@ export function PropertyFinder({ current, onSelect }: Props) {
                     </Select.ComboBox>
                 </div>
                 {hasFilter && (
-                    <Button size="md" color="secondary" iconLeading={XClose} onClick={clear} className="sm:mt-[1.625rem]">
-                        Clear filters
-                    </Button>
+                    <div className="flex gap-2 sm:mt-[1.625rem]">
+                        <Button
+                            size="md"
+                            color="secondary"
+                            iconLeading={List}
+                            iconTrailing={showList ? ChevronUp : ChevronDown}
+                            aria-expanded={showList}
+                            isDisabled={results.length === 0}
+                            onClick={() => setShowList(!showList)}
+                        >
+                            {showList ? "Hide addresses" : `List all ${results.length.toLocaleString()}`}
+                        </Button>
+                        <Button size="md" color="secondary" iconLeading={XClose} onClick={clear}>
+                            Clear filters
+                        </Button>
+                    </div>
                 )}
             </div>
+            {showList && results.length > 0 && (
+                <div className="flex flex-col gap-2">
+                    <p className="text-xs text-tertiary">
+                        {results.length.toLocaleString()} addresses
+                        {withPermits > 0 && ` · ${withPermits} with an open permit (issued or in review)`}. Click one to analyse it.
+                    </p>
+                    <div className="max-h-80 overflow-auto rounded-lg ring-1 ring-secondary" data-testid="address-list">
+                        <table className="w-full text-sm">
+                            <caption className="sr-only">Addresses matching the filters</caption>
+                            <thead className="sticky top-0 z-10 bg-secondary text-xs text-tertiary">
+                                <tr>
+                                    <th scope="col" className="px-3 py-2 text-left font-medium">
+                                        Address
+                                    </th>
+                                    {multiStreet && (
+                                        <th scope="col" className="px-3 py-2 text-left font-medium max-md:hidden">
+                                            Street
+                                        </th>
+                                    )}
+                                    <th scope="col" className="px-3 py-2 text-left font-medium">
+                                        Lot / block
+                                    </th>
+                                    <th scope="col" className="px-3 py-2 text-left font-medium max-sm:hidden">
+                                        Type
+                                    </th>
+                                    <th scope="col" className="px-3 py-2 text-left font-medium">
+                                        Permits
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-secondary">
+                                {results.map((r) => (
+                                    <tr
+                                        key={`${r.pin}-${r.address}`}
+                                        className={cx("cursor-pointer hover:bg-primary_hover", current?.pin === r.pin && "bg-brand-primary_alt")}
+                                        onClick={() => onSelect(r)}
+                                    >
+                                        <th scope="row" className="px-3 py-1.5 text-left font-medium text-primary">
+                                            <button
+                                                type="button"
+                                                className="text-left outline-focus-ring hover:underline focus-visible:outline-2"
+                                                onClick={() => onSelect(r)}
+                                            >
+                                                {r.address}
+                                            </button>
+                                            {current?.pin === r.pin && (
+                                                <Badge type="pill-color" color="brand" size="sm" className="ml-2">
+                                                    Subject
+                                                </Badge>
+                                            )}
+                                        </th>
+                                        {multiStreet && <td className="px-3 py-1.5 text-tertiary max-md:hidden">{r.street}</td>}
+                                        <td className="px-3 py-1.5 whitespace-nowrap text-tertiary">
+                                            {[r.lot && `Lot ${r.lot}`, r.block && `Blk ${r.block}`].filter(Boolean).join(" · ") || "—"}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-tertiary max-sm:hidden">{typeLabel(r)}</td>
+                                        <td className="px-3 py-1.5">
+                                            {r.permit_stage ? <PermitStageBadge stage={r.permit_stage} /> : <span className="text-quaternary">—</span>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
             <p role="status" className="sr-only">
                 {status}
             </p>

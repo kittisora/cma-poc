@@ -23,7 +23,7 @@ os.environ["AI_PROVIDER"] = "auto"
 from app.config import get_settings  # noqa: E402
 from app.db import make_engine, session_factory, set_engine  # noqa: E402
 from app.migrate import upgrade_db  # noqa: E402
-from app.sources.base import AdditionRow, AddressRow, DwellingRow, ParcelRow, ProviderInfo, SaleRow  # noqa: E402
+from app.sources.base import AdditionRow, AddressRow, DwellingRow, ParcelRow, PermitRow, ProviderInfo, SaleRow  # noqa: E402
 
 SUBJECT_PIN = "1000 01  0001"
 LAT0, LON0 = 38.74, -77.06
@@ -103,6 +103,17 @@ class FakeProvider:
         self.parcels.append(_parcel(th, land_use="Townhouse in ownership development", lot=2000))
         self.dwellings.append(_dwelling(th, sfla=1900))
         self.sales.append(_sale(th, "2026-07-07", 600000))
+        # permits relative to today, so their stage does not drift as the calendar moves
+        today = dt.date.today()
+        ago = lambda days: today - dt.timedelta(days=days)  # noqa: E731
+        self.permits = [
+            _permit("site", "INF-1", SUBJECT_PIN, "Infill Lot Grading Plan", "Approved", ago(40), ago(20)),
+            _permit("building", "BLDR-1", "1000 01  0002", "Residential New", "Issued", ago(60), ago(30)),
+            _permit("building", "ALTR-1", "1000 01  0003", "Residential Addition/Alteration", "Closed", ago(400),
+                    ago(380), closed=ago(200)),
+            _permit("building", "BLDR-2", "1000 01  0004", "Residential New", "Expired", ago(300), ago(290)),
+            _permit("site", "WAIV-1", "1000 02  0001", "Waivers", "Approved", dt.date(2014, 1, 5), dt.date(2015, 3, 1)),
+        ]
         self.additions = [AdditionRow(pin=SUBJECT_PIN, line=1, area_sf=400, lower_desc=None,
                                       first_desc="ATTACHED GARAGE", second_desc=None, third_desc=None,
                                       source_object_id=1, raw={})]
@@ -128,6 +139,15 @@ class FakeProvider:
 
     def fetch_sales(self, pins):
         return [s for s in self.sales if s.pin in pins]
+
+    def fetch_permits(self, pins):
+        return [p for p in self.permits if p.pin in pins]
+
+
+def _permit(kind, rid, pin, app_type, status, submitted, issued, closed=None):
+    return PermitRow(kind=kind, record_id=rid, pin=pin, app_type=app_type, project_name=f"{app_type} project",
+                     status=status, status_date=closed or issued, submitted_date=submitted, issued_date=issued,
+                     closed_date=closed, address=None, zip="22308", link_url=f"https://plus.example/{rid}", raw={})
 
 
 @pytest.fixture

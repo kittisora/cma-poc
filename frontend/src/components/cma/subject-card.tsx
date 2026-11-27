@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, ClockRewind, Edit05, Home02, HomeLine } from "@untitledui/icons";
+import { ChevronDown, ChevronUp, ClockRewind, Edit05, Home02, HomeLine, Tool02 } from "@untitledui/icons";
 import { Table } from "@/components/application/table/table";
 import { Badge, BadgeWithDot } from "@/components/base/badges/badges";
 import { Button } from "@/components/base/buttons/button";
 import { FeaturedIcon } from "@/components/foundations/featured-icon/featured-icon";
 import { PROPERTY_TYPES, money, num } from "@/lib/format";
 import type { Analysis, Meta, Property, SubjectPlan } from "@/lib/types";
+import { PermitList } from "./permit-badge";
 import { PlannedHouseForm } from "./planned-house";
 
 interface Props {
@@ -20,6 +21,9 @@ interface Props {
 export function SubjectCard({ a, plan, options, onPlan }: Props) {
     const s = a.subject;
     const [showHistory, setShowHistory] = useState(false);
+    const [showPermits, setShowPermits] = useState(false);
+    const permits = a.subject_permits ?? [];
+    const openPermits = permits.filter((p) => p.stage === "active" || p.stage === "pending").length;
     const [editing, setEditing] = useState(false);
     const planned = new Set(s.planned ?? []);
     // the subject as the county records it: the analysed subject with the planned values swapped back
@@ -37,9 +41,15 @@ export function SubjectCard({ a, plan, options, onPlan }: Props) {
         [
             "Beds / baths",
             `${s.beds ?? "—"} / ${s.baths_label ?? "—"}`,
-            ["beds", "full_baths", "half_baths"].some((k) => planned.has(k)) ? `${county.beds ?? "—"} / ${county.full_baths ?? 0}/${county.half_baths ?? 0}` : null,
+            ["beds", "full_baths", "half_baths"].some((k) => planned.has(k))
+                ? `${county.beds ?? "—"} / ${county.full_baths ?? 0}/${county.half_baths ?? 0}`
+                : null,
         ],
-        ["Above-grade", s.above_grade_sf ? `${num(s.above_grade_sf)} sf` : "not recorded", planned.has("above_grade_sf") ? cv("above_grade_sf", (v: number) => `${num(v)} sf`) : null],
+        [
+            "Above-grade",
+            s.above_grade_sf ? `${num(s.above_grade_sf)} sf` : "not recorded",
+            planned.has("above_grade_sf") ? cv("above_grade_sf", (v: number) => `${num(v)} sf`) : null,
+        ],
         [
             "Total finished",
             s.total_finished_sf ? `${num(s.total_finished_sf)} sf (${s.total_finished_source})` : "not recorded",
@@ -84,12 +94,20 @@ export function SubjectCard({ a, plan, options, onPlan }: Props) {
                         )}
                     </div>
                 </div>
-                <Button size="sm" color={planned.size ? "secondary" : "primary"} iconLeading={planned.size ? Edit05 : HomeLine} onClick={() => setEditing(!editing)} aria-expanded={editing}>
+                <Button
+                    size="sm"
+                    color={planned.size ? "secondary" : "primary"}
+                    iconLeading={planned.size ? Edit05 : HomeLine}
+                    onClick={() => setEditing(!editing)}
+                    aria-expanded={editing}
+                >
                     {planned.size ? "Edit planned house" : "Describe house to sell / build"}
                 </Button>
             </header>
 
-            {editing && <PlannedHouseForm key={JSON.stringify(plan)} county={county} plan={plan} options={options} onApply={onPlan} onClose={() => setEditing(false)} />}
+            {editing && (
+                <PlannedHouseForm key={JSON.stringify(plan)} county={county} plan={plan} options={options} onApply={onPlan} onClose={() => setEditing(false)} />
+            )}
 
             <dl className="grid grid-cols-2 gap-x-6 gap-y-3 p-5 md:grid-cols-3 xl:grid-cols-5">
                 {facts.map(([k, v, countyValue]) => (
@@ -112,7 +130,18 @@ export function SubjectCard({ a, plan, options, onPlan }: Props) {
                 </ul>
             )}
 
-            <div className="border-t border-secondary px-5 py-3">
+            <div className="flex flex-wrap gap-x-4 border-t border-secondary px-5 py-3">
+                <Button
+                    color="link-gray"
+                    size="sm"
+                    iconLeading={Tool02}
+                    iconTrailing={showPermits ? ChevronUp : ChevronDown}
+                    aria-expanded={showPermits}
+                    onClick={() => setShowPermits(!showPermits)}
+                >
+                    Permits on this property ({permits.length}
+                    {openPermits ? `, ${openPermits} open` : ""})
+                </Button>
                 <Button
                     color="link-gray"
                     size="sm"
@@ -124,6 +153,11 @@ export function SubjectCard({ a, plan, options, onPlan }: Props) {
                     Recorded transfers of this property ({a.sale_history.length})
                 </Button>
             </div>
+            {showPermits && (
+                <div className="border-t border-secondary px-5 py-2">
+                    <PermitList permits={permits} />
+                </div>
+            )}
             {showHistory && (
                 <Table aria-label="Recorded transfers of the subject" size="sm">
                     <Table.Header>

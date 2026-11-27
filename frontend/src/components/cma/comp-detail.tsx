@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/base/checkbox/checkbox";
 import { ProgressBar } from "@/components/base/progress-indicators/progress-indicators";
 import { money, num, ppsf } from "@/lib/format";
 import type { Comp } from "@/lib/types";
+import { PermitList } from "./permit-badge";
 
 interface Props {
     comp: Comp | null;
@@ -72,6 +73,13 @@ export function CompDetail({ comp: c, isSelected, onToggle, onClose }: Props) {
                                     <p className="text-xs text-tertiary">{f.detail}</p>
                                 </div>
                             ))}
+                        </section>
+
+                        <section aria-labelledby="permits-heading" className="flex flex-col gap-1">
+                            <h3 id="permits-heading" className="text-sm font-semibold text-primary">
+                                Permits on this parcel ({c.permits?.length ?? 0})
+                            </h3>
+                            <PermitList permits={c.permits ?? []} />
                         </section>
 
                         <section aria-labelledby="record-heading" className="flex flex-col gap-2 pb-6">

@@ -27,6 +27,7 @@ from .base import (
     DatasetInfo,
     DwellingRow,
     ParcelRow,
+    PermitRow,
     ProviderInfo,
     SaleRow,
 )
@@ -45,6 +46,8 @@ DATASETS = {
     "legal": ("Tax_Administration_Real_Estate_Legal_Data", "Real Estate Legal"),
     "land": ("Tax_Administration_Real_Estate_Land_Data", "Real Estate Land"),
     "values": ("Tax_Administration_Real_Estate_Assessed_Values", "Real Estate Assessed Values"),
+    "building_permits": ("Building_Records_PLUS", "Building Permits (PLUS)"),
+    "site_records": ("Site_Records_PLUS", "Site and Land Development Records (PLUS)"),
 }
 
 TERMS_URL = "https://www.fairfaxcounty.gov/maps/disclaimer"
@@ -117,14 +120,14 @@ class FairfaxArcGISProvider:
                 break
         return features
 
-    def _query_pins(self, dataset: str, pins: list[str]) -> list[dict]:
+    def _query_pins(self, dataset: str, pins: list[str], field: str = "PARID", **extra) -> list[dict]:
         def chunk(seq: list[str], n: int) -> Iterable[list[str]]:
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 
         def one(batch: list[str]) -> list[dict]:
             quoted = ",".join("'" + p.replace("'", "''") + "'" for p in batch)
-            return self._query_all(dataset, f"PARID IN ({quoted})")
+            return self._query_all(dataset, f"{field} IN ({quoted})", **extra)
 
         with ThreadPoolExecutor(self.concurrency) as ex:
             results = list(ex.map(one, list(chunk(sorted(set(pins)), PIN_BATCH))))
@@ -255,6 +258,26 @@ class FairfaxArcGISProvider:
                 second_desc=_clean(a.get("SECOND_DESC")), third_desc=_clean(a.get("THIRD_DESC")),
                 source_object_id=a.get("OBJECTID"), raw=a,
             ))
+        return rows
+
+    def fetch_permits(self, pins: list[str]) -> list[PermitRow]:
+        """Building permits and site records from PLUS (the county's permitting system) for these parcels."""
+        rows = []
+        for kind, dataset in (("building", "building_permits"), ("site", "site_records")):
+            for f in self._query_pins(dataset, pins, field="PARCEL_ID", returnGeometry="false"):
+                a = f["attributes"]
+                if not _clean(a.get("RECORDID")) or (a.get("PUBLIC_VIEW") or "Yes").lower() == "no":
+                    continue
+                d = arcgis_ms_to_local_date
+                rows.append(PermitRow(
+                    kind=kind, record_id=a["RECORDID"].strip(), pin=_clean(a.get("PARCEL_ID")),
+                    app_type=_clean(a.get("APPTYPEALIAS")), project_name=_clean(a.get("PROJECT_NAME")),
+                    status=_clean(a.get("RECORD_STATUS")), status_date=d(a.get("RECORD_STATUS_DATE")),
+                    submitted_date=d(a.get("SUBMITTED_DATE")),
+                    issued_date=d(a.get("ISSUED_DATE") if kind == "building" else a.get("APPROVED_DATE")),
+                    closed_date=d(a.get("CLOSED_DATE")), address=_clean(a.get("ADDRESS_1")),
+                    zip=_clean(a.get("ZIP_CODE")), link_url=_clean(a.get("LINK_URL")), raw=a,
+                ))
         return rows
 
     def fetch_sales(self, pins: list[str]) -> list[SaleRow]:

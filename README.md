@@ -57,6 +57,12 @@ The key stays on the server and is never sent to the browser. Everything else wo
      block**. Shown on the search summary and under "Search rules".
    - **Sold within the last**: 3 months, 6 months, 1 year (default) or 2 years, next to "Comps from". Any other
      period can be typed under "Search rules" (Look-back). Reports state the area and period used.
+   - **Several streets at once**: the Streets box takes more than one street; "List all" shows every matching
+     address with its lot/block and any open permit, and clicking a row analyses it.
+   - **Maps** have a layer switcher (top right): street map, **Fairfax zoning (fill / edge) with property** (the
+     county's own zoning tile services), and aerial imagery. The choice is remembered.
+   - Each comp lists the **permits on its parcel**; a new-house or addition permit after the sale is flagged, because
+     the county record may then describe the rebuilt house rather than the one sold.
 2. Review the comps:
    - the map, the $/sf chart and the table are linked: click a marker or a bar to highlight the table row
    - each comp has a score bar and a reason; the arrow opens a side panel with the factor breakdown and the county
@@ -75,11 +81,16 @@ The key stays on the server and is never sent to the browser. Everything else wo
    - the export refuses if the figures changed since review
 5. **Ask AI** (button on the estimate card; needs `OPENAI_API_KEY`): a side panel chat. The assistant reads the computed
    facts, comps and valuation through tools, cites records, and explains them. It cannot change the numbers.
-6. **Workbook check**: reproduces the client workbook's "1009 New" = $3,190,926.67, shows the recalculated figures,
+6. **Permits** page: building permits and site / land-development records (Fairfax County PLUS) for a subdivision,
+   block or set of streets, filtered by status (issued / under construction, in review, completed, old not closed,
+   expired) and record type, with a "new construction only" switch, summary counts, a map and links to each PLUS
+   record. Building permits are available from September 2022; an open record older than 3 years is reported as
+   "old, not closed" rather than as current construction. Loaded by the daily refresh.
+7. **Workbook check**: reproduces the client workbook's "1009 New" = $3,190,926.67, shows the recalculated figures,
    and lists the issues found. The **Subject** can also be set to any address in 22308/22309, and the choice is saved
    for the whole team. The page then shows the workbook formula applied to that house next to a live Fairfax CMA for
    it.
-7. **Data & sources**: last refresh, datasets, terms, and which workbook fields come from where.
+8. **Data & sources**: last refresh, datasets, terms, and which workbook fields come from where.
 
 ## How it works
 

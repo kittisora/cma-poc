@@ -2,10 +2,10 @@
 
 import type { PropsWithChildren } from "react";
 import { useEffect, useState } from "react";
-import { BarChartSquare02, Calculator, Database02, Moon01, Stars02, Sun } from "@untitledui/icons";
+import { BarChartSquare02, Calculator, Database02, Moon01, Stars02, Sun, Tool02 } from "@untitledui/icons";
+import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
 import { MobileNavigationHeader } from "@/components/application/app-navigation/base-components/mobile-header";
 import { NavButton } from "@/components/application/app-navigation/base-components/nav-button";
 import { NavList } from "@/components/application/app-navigation/base-components/nav-list";
@@ -19,6 +19,7 @@ import { useCma } from "@/providers/cma-provider";
 
 const NAV: (NavItemType & { href: string })[] = [
     { label: "CMA", href: "/", icon: BarChartSquare02 },
+    { label: "Permits", href: "/permits", icon: Tool02 },
     { label: "Workbook check", href: "/workbook", icon: Calculator },
     { label: "Data & sources", href: "/data", icon: Database02 },
 ];

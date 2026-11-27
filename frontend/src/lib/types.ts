@@ -89,6 +89,48 @@ export interface SearchResult {
   block?: string | null;
   lot?: string | null;
   street?: string | null;
+  /** Most significant open permit stage on the parcel, if any. */
+  permit_stage?: PermitStage | null;
+}
+
+export type PermitStage = "active" | "pending" | "completed" | "stale" | "inactive";
+
+/** A building permit or site (land development) record from Fairfax County PLUS. */
+export interface Permit {
+  kind: "building" | "site";
+  record_id: string;
+  pin: string | null;
+  type: string | null;
+  project: string | null;
+  status: string | null;
+  stage: PermitStage;
+  new_construction: boolean;
+  address: string | null;
+  zip: string | null;
+  submitted: string | null;
+  issued: string | null;
+  closed: string | null;
+  status_date: string | null;
+  link: string | null;
+  in_latest_source: boolean;
+  lat?: number | null;
+  lon?: number | null;
+  subdivision?: string | null;
+  block?: string | null;
+  street?: string | null;
+  site_address?: string | null;
+}
+
+export interface PermitSearch {
+  total: number;
+  results: Permit[];
+  stages: Record<PermitStage, string>;
+  summary: {
+    by_stage: Partial<Record<PermitStage, number>>;
+    by_type: Record<string, number>;
+    new_construction: Partial<Record<PermitStage, number>>;
+    parcels: number;
+  };
 }
 
 export interface AreaOption {
@@ -185,6 +227,8 @@ export interface Comp {
   differences: string[];
   missing: string[];
   warnings: string[];
+  /** Permits on the comp's parcel (most recent first). */
+  permits: Permit[];
   source: SourceRef;
 }
 
@@ -253,6 +297,7 @@ export interface Analysis {
   valuation_date: string;
   criteria: Criteria;
   plan: SubjectPlan | null;
+  subject_permits: Permit[];
   /** County values the planned house replaced (field -> county value). */
   county_values: Record<string, string | number | null> | null;
   search: {

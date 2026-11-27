@@ -34,6 +34,7 @@ from ..models import (
     Dwelling,
     DwellingAddition,
     Parcel,
+    Permit,
     RefreshRun,
     Sale,
     SourceRecordHistory,
@@ -298,6 +299,38 @@ def upsert_sales(session: Session, provider_key: str, rows: list[SaleRow], pins:
     return counts
 
 
+PERMIT_FIELDS = ["pin", "app_type", "project_name", "status", "status_date", "submitted_date", "issued_date",
+                 "closed_date", "address", "zip", "link_url"]
+
+
+def upsert_permits(session: Session, provider_key: str, rows: list, run: RefreshRun, now: dt.datetime) -> dict:
+    existing = {(p.kind, p.record_id): p for p in session.scalars(select(Permit).where(Permit.provider == provider_key))}
+    counts = {"inserted": 0, "updated": 0, "unchanged": 0, "missing_from_source": 0}
+    seen = set()
+    for r in rows:
+        key = (r.kind, r.record_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        values = {f: getattr(r, f) for f in PERMIT_FIELDS}
+        obj = existing.get(key)
+        if obj is None:
+            session.add(Permit(provider=provider_key, kind=r.kind, record_id=r.record_id, raw=r.raw, retrieved_at=now,
+                               last_seen_run_id=run.id, in_latest_source=True, **values))
+            counts["inserted"] += 1
+            continue
+        changed = _changed(obj, values, PERMIT_FIELDS)
+        for f in changed:
+            setattr(obj, f, values[f])
+        counts["updated" if changed else "unchanged"] += 1
+        obj.raw, obj.retrieved_at, obj.last_seen_run_id, obj.in_latest_source = r.raw, now, run.id, True
+    for key, obj in existing.items():
+        if key not in seen and obj.in_latest_source:
+            obj.in_latest_source = False
+            counts["missing_from_source"] += 1
+    return counts
+
+
 # ---------------------------------------------------------------------- run
 def run_refresh(session: Session, provider: DataProvider, zips: list[str],
                 now: dt.datetime | None = None) -> RefreshRun:
@@ -327,6 +360,9 @@ def run_refresh(session: Session, provider: DataProvider, zips: list[str],
         t = mark("fetch_dwellings", t)
         sales = provider.fetch_sales(pins)
         t = mark("fetch_sales", t)
+        permits = provider.fetch_permits(pins) if hasattr(provider, "fetch_permits") else None
+        if permits is not None:
+            t = mark("fetch_permits", t)
 
         counts = {
             "pins": len(pins),
@@ -335,6 +371,8 @@ def run_refresh(session: Session, provider: DataProvider, zips: list[str],
             "dwellings": replace_dwellings(session, provider.key, dwellings, additions, pins, run, now),
             "sales": upsert_sales(session, provider.key, sales, pins, run, now),
         }
+        if permits is not None:
+            counts["permits"] = upsert_permits(session, provider.key, permits, run, now)
         session.flush()
         t = mark("write_database", t)
         timings["total"] = round(time.perf_counter() - t0, 2)
